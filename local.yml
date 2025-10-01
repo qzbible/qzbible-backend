@@ -1,0 +1,37 @@
+services:
+  app:
+    build: .
+    container_name: qbible-app
+    ports:
+      - "5001:5001"
+    depends_on:
+      - mongodb
+    environment:
+      - FLASK_ENV=development  # Indique l'environnement de développement
+    env_file:
+      - .env # Indique le fichier d'environnement Flask
+      - ./.envs/.mongo  # Indique le fichier d'environnement MongoDB
+    volumes:
+      - .:/app  # Indique le répertoire local vers le conteneur pour le code source
+    networks:
+      - qbible_network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db  # Persiste les données de MongoDB
+      - ./dump:/data/dump  
+      - ./init-restore.sh:/docker-entrypoint-initdb.d/init-restore.sh  # Script d'auto-import
+    networks:
+      - qbible_network
+
+volumes:
+  mongodb_data:  # Définition du volume persistant pour MongoDB
+    driver: local
+
+networks:
+  qbible_network:
+    driver: bridge

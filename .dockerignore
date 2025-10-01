@@ -1,0 +1,11 @@
+# Ignore les fichiers et dossiers inutiles
+__pycache__
+instance/
+migrations/
+.git
+.gitignore
+*.pyc
+*.pyo
+*.pyd
+.flaskenv
+.dockerignore

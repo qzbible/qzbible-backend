@@ -1,0 +1,2 @@
+MONGO_URI=mongodb://mongodb:27017/delivery_db2
+JWT_SECRET_KEY=your-secret-key
