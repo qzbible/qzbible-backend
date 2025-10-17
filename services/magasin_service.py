@@ -148,9 +148,9 @@ def get_all_magasin_service():
             if magasin.get("logo"):
                 magasin["logo"] = f"{request.host_url}uploads/images/{magasin['logo']}" 
         
-        return {"magasins": magasins, "status": 200}
+        return {"church": magasins, "status": 200}
     except Exception as e:
-        return {"message": f"Erreur lors de la récupération des magasins : {str(e)}", "status": 500}
+        return {"message": f"Erreur lors de la récupération des church : {str(e)}", "status": 500}
     
     
 # Supprimer un magasin

@@ -303,8 +303,8 @@ def delete_magasin(magasin_id):
 
 # Récupérer tous les magasins
 @magasin_bp.route('/all', methods=['GET'])
-@jwt_required()
-@role_required("staff")
+# @jwt_required()
+# @role_required("staff")
 def get_all_magasin():
     """
     Récupérer tous les magasins.
@@ -326,7 +326,7 @@ def get_all_magasin():
     """
     try:
         magasins = get_all_magasin_service()
-        return jsonify({"magasins": magasins}), 200
+        return jsonify({"church": magasins}), 200
     except Exception as e:
         return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
       
