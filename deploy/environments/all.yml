@@ -1,0 +1,13 @@
+---
+# Global vars
+traefik_network: traefik-public
+
+# DB settings
+qzbible_backend_db_host: "{{ vault_db_host }}"
+qzbible_backend_db_name: "{{ vault_db_name }}"
+qzbible_backend_db_user: "{{ vault_db_user }}"
+qzbible_backend_db_password: "{{ vault_db_password }}"
+qzbible_backend_db_port: "{{ vault_db_port }}"
+
+# Django settings
+qzbible_backend_flask_secret_key: "{{ vault_flask_secret_key }}"

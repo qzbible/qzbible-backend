@@ -1,0 +1,2 @@
+MONGO_URI=mongodb://{{qzbible_backend_db_host}}:{{qzbible_backend_db_port}}/{{qzbible_backend_db_name}}
+JWT_SECRET_KEY={{qzbible_backend_flask_secret_key}}

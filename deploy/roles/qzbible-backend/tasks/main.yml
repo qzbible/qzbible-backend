@@ -1,0 +1,122 @@
+---
+
+# - name: Create log directories
+#   file:
+#     path: "/var/log/klivar-backend/{{ env }}/backend-main"
+#     state: directory
+#     owner: 1000
+#     group: 1000
+#     mode: '0755'
+#     recurse: yes  # Crée aussi les répertoires parents si nécessaire
+#   become: yes
+
+- name: Create nginx configuration
+  community.docker.docker_config:
+    name: "{{ nginx_config_name }}"
+    state: present
+    data: "{{ lookup('ansible.builtin.template', 'nginx.conf') }}"
+
+- name: Make sure the destination_folder exists
+  ansible.builtin.file:
+    path: "{{ final_dest_folder }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0764"
+
+- name: Copy the docker stack file
+  ansible.builtin.template:
+    src: "stack.yml"
+    dest: "{{ final_dest_folder }}/stack.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0764"
+  register: stack_file
+
+- name: Copy the env files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "{{ final_dest_folder }}/.{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+  loop:
+    - flask.env
+    - mongo
+  register: env_files
+
+# This is a hack to use docker-compose to replace the env vars since swarm cannot do that
+- name: Generate the final stack file
+  ansible.builtin.command:
+    cmd: docker compose -f stack.yml config -o final-stack.yml
+    chdir: "{{ final_dest_folder }}"
+  changed_when: stack_file.changed
+
+- name: Make sure the final is compatible with docker swarm
+  ansible.builtin.command:
+    cmd: yq --inplace 'del(.name)' final-stack.yml # Remove the top level name as swarm doesn't support it
+    chdir: "{{ final_dest_folder }}"
+  changed_when: stack_file.changed
+
+# Corrige le problème de mode en le convertissant en décimal
+- name: Fix the config mode values in final stack file
+  ansible.builtin.replace:
+    path: "{{ final_dest_folder }}/final-stack.yml"
+    regexp: 'mode: ["'']?0440["'']?'
+    replace: 'mode: 288'
+  changed_when: true
+
+# Ajoute une vérification pour s'assurer que la correction a été appliquée
+- name: Verify the fix was applied
+  ansible.builtin.command:
+    cmd: grep -A 3 'configs:' final-stack.yml
+    chdir: "{{ final_dest_folder }}"
+  register: grep_result
+  changed_when: false
+  failed_when: "'mode: 288' not in grep_result.stdout"
+
+- name: Deploy the stack
+  community.docker.docker_stack:
+    name: "{{ stack_name }}"
+    compose:
+      - "{{ final_dest_folder }}/final-stack.yml"
+    prune: true
+    state: present
+    resolve_image: always
+    with_registry_auth: true
+  register: stack_deploy
+
+- name: Wait for the deployment to finish
+  ansible.builtin.command:
+    cmd: docker-stack-wait -t 20 {{ stack_name }}
+    chdir: "{{ final_dest_folder }}"
+  register: wait_for_deploy
+  ignore_errors: true
+  changed_when: false
+  retries: 7
+  delay: 2
+
+- name: Deployment output
+  ansible.builtin.debug:
+    msg: "{{ wait_for_deploy.stdout_lines + wait_for_deploy.stderr_lines }}"
+
+- name: Fail if "the wait for deployment to finish" fails
+  ansible.builtin.fail:
+    msg: "The deployment has failed. See the previous logs"
+  when: wait_for_deploy.rc != 0
+
+
+# TODO: get the logs of the failed services?
+
+# - name: Check if we can access the service
+#   ansible.builtin.uri:
+#     url: http://{{ bdn_back_hostname }}/__healthcheck/
+#     follow_redirects: true
+#     return_content: true
+#     headers:
+#       Accept: application/json
+#   register: this
+#   failed_when: "this.status != 200 or 'https://' not in this.url"
+#   retries: 5
+#   delay: 20
+#   until: this.status == 200

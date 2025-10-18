@@ -1,0 +1,7 @@
+---
+final_dest_folder: "{{ dest_folder }}/{{ stack_name }}"
+flask_listening_port: 5000
+nginx_config_name: "{{ env }}-qzbible-main-nginx-conf-devKKs"
+
+# This is where the docker dependencies are installed
+ansible_python_interpreter: /usr/local/bin/python3-docker

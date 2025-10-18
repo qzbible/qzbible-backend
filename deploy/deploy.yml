@@ -1,0 +1,16 @@
+---
+- name: Deploy Backend
+  hosts: ovh_manager
+  vars_files:
+    - environments/all.yml
+    - environments/{{ env }}/vars.yml
+    - environments/{{ env }}/vault
+
+  roles:
+    - role: qzbible-backend
+      stack_name: "{{ env }}-qzbible-backend"
+      dest_folder: "/apps" 
+      hostname: "{{ backend_app_hostname }}"
+     
+
+

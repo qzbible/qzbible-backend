@@ -1,0 +1,86 @@
+# docker-compose.yml
+# Stack Docker Swarm pour QZBible Backend avec MongoDB
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:1.21.5-alpine
+    configs:
+      - source: "{{ nginx_config_name }}"
+        target: /etc/nginx/conf.d/default.conf
+        mode: 0440
+    networks:
+      - qzbible
+      - "{{ traefik_network }}"
+    depends_on:
+      - api
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        order: start-first
+        parallelism: 1
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        order: start-first
+        parallelism: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - traefik.enable=true
+        - traefik.constraint-label=traefik-public
+        # Http router: redirection to https
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-http.rule=Host(`{{ hostname }}`)
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-http.entrypoints=http
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-http.middlewares=https-redirect
+        # Https router
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-https.rule=Host(`{{ hostname }}`)
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-https.entrypoints=https
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-https.tls=true
+        - traefik.http.routers.{{ env }}-nginx-qzbible_backend-https.tls.certresolver=letsencrypt
+        # Pointing to nginx
+        - traefik.http.services.{{ env }}-nginx-qzbible_backend.loadbalancer.server.port=80
+
+  api:
+    image: "{{ qzbible_backend_image }}"  
+    networks:
+      - qzbible
+    env_file:
+      - ./.flask.env
+      - ./.mongo
+    
+    deploy:
+      mode: replicated
+      replicas: 1  # ← Attention: replicas à 0 = service désactivé
+      update_config:
+        order: start-first
+        parallelism: 1
+        failure_action: rollback
+      rollback_config:
+        order: start-first
+        parallelism: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=false
+      placement:
+        constraints:
+          - node.role == manager
+ 
+
+
+networks:
+  qzbible:
+    name: "{{ env }}-qzbible-backend"
+  "{{ traefik_network }}":
+    external: true
+
+configs:
+  "{{ nginx_config_name }}":
+    external: true

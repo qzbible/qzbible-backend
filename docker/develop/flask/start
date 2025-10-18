@@ -1,0 +1,16 @@
+#!/bin/bash
+ 
+set -o errexit
+set -o pipefail
+set -o nounset
+
+echo "Starting Flask application setup..."
+
+# Run database migrations
+echo "Running database migrations..."
+flask db upgrade
+
+echo "Flask application starting..."
+
+# Start Flask application
+flask run --host=0.0.0.0 --port="${flask_listening_port:-5001}"
