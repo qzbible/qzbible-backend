@@ -53,7 +53,7 @@ services:
       - qzbible
     env_file:
       - ./.flask.env
-      - ./.mongo.envs
+      - ./.mongo.env
     
     deploy:
       mode: replicated
