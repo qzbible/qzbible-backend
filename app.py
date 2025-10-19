@@ -86,15 +86,17 @@ def create_app():
             "url": "/apidocs/"
         }), 200
     
+     
     swagger = Swagger(app, template={
         "swagger": "2.0",
         "info": {
-            "title": "Delivery Management API",
+            "title": "QZBible API",
             "description": "API de gestion de livraison avec rôles, JWT, création de magasin, etc.",
             "version": "1.0.0"
         },
+        "host": os.getenv("BASE_URL", "localhost:5000"),  # Votre domaine
         "basePath": "/",
-        "schemes": ["http", "https"],
+        "schemes": ["https", "http"],  # HTTPS EN PREMIER !
         "securityDefinitions": {
             "Bearer": {
                 "type": "apiKey",
