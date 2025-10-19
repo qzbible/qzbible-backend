@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup ansible
-        uses: qzbible/config-server/.github/actions/setup-ansible@v1.0.1
+        uses: qzbible/config-server/.github/actions/setup-ansible@v1.0.3
         with:
           ssh_private_key: ${{ secrets.OVH_MANAGER_SSH_PRIVATE_KEY }}
           ansible_vault_pass: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
