@@ -42,7 +42,7 @@
     mode: "0700"
   loop:
     - flask.env
-    - mongo
+    - mongo.env
   register: env_files
 
 # This is a hack to use docker-compose to replace the env vars since swarm cannot do that
