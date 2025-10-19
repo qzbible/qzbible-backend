@@ -12,23 +12,19 @@ services:
     networks:
       - qzbible
       - "{{ traefik_network }}"
-    depends_on:
-      - api
+    
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 1  # ← Attention: replicas à 0 = service désactivé
       update_config:
         order: start-first
         parallelism: 1
         failure_action: rollback
-        delay: 10s
       rollback_config:
         order: start-first
         parallelism: 1
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
       placement:
         constraints:
           - node.role == manager
