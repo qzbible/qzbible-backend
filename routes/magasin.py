@@ -3,7 +3,8 @@ import json
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from schemas.magasin_schema import CreateMagasinSchema, MagasinUpdateSchema
 from services.magasin_service import (
-  create_magasin, 
+  create_magasin,
+  search_magasins_service, 
   update_magasin_service, 
   get_magasin_service, 
   delete_magasin_service,
@@ -341,19 +342,20 @@ def search_magasins():
     pays = request.args.get('pays', None)
     ville = request.args.get('ville', None)
     quartier = request.args.get('quartier', None)
-    
-    magasins = search_magasins(
-        search_query=search_query,
-        pays=pays,
-        ville=ville,
-        quartier=quartier
-    )
-    
-    return jsonify({
-        "success": True,
-        "count": len(magasins),
-        "data": magasins
-    }), 200
+    try:
+      magasins = search_magasins_service(
+          search_query=search_query,
+          pays=pays,
+          ville=ville,
+          quartier=quartier
+      )
+      
+      return jsonify({ 
+          "data": magasins
+      }), 200
+    except Exception as e:
+      
+      return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
 
 @magasin_bp.route("<string:magasin_id>/toggle-status", methods=["PUT"])
 @jwt_required()

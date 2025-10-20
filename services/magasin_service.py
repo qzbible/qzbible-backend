@@ -215,4 +215,38 @@ def get_magasin_service(magasin_id):
     except Exception as e:
         return {"message": f"Erreur lors de la récupération du magasin : {str(e)}", "status": 500}
     
+
+
+def search_magasins_service(search_query=None, pays=None, ville=None, quartier=None):
+    """
+    Service pour rechercher et filtrer les magasins selon plusieurs critères.
+    
+    :param search_query: Texte de recherche pour la dénomination (optionnel)
+    :param pays: Filtre par pays (optionnel)
+    :param ville: Filtre par ville (optionnel)
+    :param quartier: Filtre par quartier (optionnel)
+    :return: Dictionnaire contenant les magasins filtrés et le statut
+    """
+    try:
+        # Appel de la méthode de recherche du modèle
+        magasins = MagasinModel.search_magasins(
+            search_query=search_query,
+            pays=pays,
+            ville=ville,
+            quartier=quartier
+        )
+        
+        # Ajouter les URLs complètes des logos si présents
+        for magasin in magasins:
+            if magasin.get("logo"):
+                magasin["logo"] = f"{request.host_url}uploads/images/{magasin['logo']}"
+        
+        return  magasins
+    
+    except Exception as e:
+        return {
+            "message": f"Erreur lors de la recherche des magasins : {str(e)}",
+            "status": 500
+        }
+    
     
