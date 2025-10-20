@@ -331,6 +331,29 @@ def get_all_magasin():
         return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
       
 
+@magasin_bp.route('/search', methods=['GET'])
+def search_magasins():
+    """
+    Endpoint pour rechercher des magasins avec filtres multiples
+    Query params: search, pays, ville, quartier
+    """
+    search_query = request.args.get('search', None)
+    pays = request.args.get('pays', None)
+    ville = request.args.get('ville', None)
+    quartier = request.args.get('quartier', None)
+    
+    magasins = search_magasins(
+        search_query=search_query,
+        pays=pays,
+        ville=ville,
+        quartier=quartier
+    )
+    
+    return jsonify({
+        "success": True,
+        "count": len(magasins),
+        "data": magasins
+    }), 200
 
 @magasin_bp.route("<string:magasin_id>/toggle-status", methods=["PUT"])
 @jwt_required()

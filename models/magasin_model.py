@@ -186,6 +186,7 @@ class MagasinModel:
     
     
      #Retourne tous les magasins de la base de données avec les utilisateurs associés.
+    
     @staticmethod
     def get_all_magasin():
         """
@@ -206,8 +207,6 @@ class MagasinModel:
             magasin["utilisateurs"] = user_list
             result.append(magasin)
         return result    
-
-
 
 
     @staticmethod
@@ -231,4 +230,54 @@ class MagasinModel:
             return {"message": "Statut du magasin mis à jour avec succès."}
         else:
             return {"message": "Aucune mise à jour effectuée."}
+        
+    @staticmethod
+    def search_magasins(search_query=None, pays=None, ville=None, quartier=None):
+        """
+        Recherche et filtre les magasins selon plusieurs critères.
+        
+        :param search_query: Texte de recherche pour la dénomination (optionnel)
+        :param pays: Filtre par pays (optionnel)
+        :param ville: Filtre par ville (optionnel)
+        :param quartier: Filtre par quartier (optionnel)
+        :return: Une liste de dictionnaires contenant les magasins filtrés avec leurs utilisateurs
+        """
+        # Construction du filtre dynamique
+        filter_query = {}
+        
+        # Recherche textuelle sur la dénomination (insensible à la casse)
+        if search_query:
+            filter_query["denomination"] = {"$regex": search_query, "$options": "i"}
+        
+        # Filtres exacts sur les champs géographiques
+        if pays:
+            filter_query["pays"] = {"$regex": pays, "$options": "i"}
+        
+        if ville:
+            filter_query["ville"] = {"$regex": ville, "$options": "i"}
+        
+        if quartier:
+            filter_query["quartier"] = {"$regex": quartier, "$options": "i"}
+        
+        # Exécution de la requête
+        magasins = MagasinModel.collection.find(filter_query)
+        result = []
+        
+        for magasin in magasins:
+            magasin_id = magasin["_id"]
+            
+            # Récupération des utilisateurs associés
+            users = UserModel.collection.find({"magasin_id": magasin_id})
+            user_list = []
+            for user in users:
+                user["_id"] = str(user["_id"])
+                user["magasin_id"] = str(user["magasin_id"])
+                user_list.append(user)
+            
+            # Conversion de l'ID et ajout des utilisateurs
+            magasin["_id"] = str(magasin["_id"])
+            magasin["utilisateurs"] = user_list
+            result.append(magasin)
+        
+        return result
         
