@@ -452,3 +452,80 @@ def get_suggestions_service(nom=None, categorie=None, description=None, tags=Non
         "categorie": img.get("categorie", ""),
         "tags": img.get("tags", [])
     } for img in images]
+
+
+
+def get_all_images_service():
+    """
+    Récupère toutes les images avec leurs URLs complètes.
+    
+    :return: Dictionnaire contenant les images et le statut
+    """
+    try:
+        images = ImageStaffModel.get_all_images()
+        
+        # Ajouter les URLs complètes pour chaque image
+        for image in images:
+            image["_id"] = str(image["_id"])
+            if image.get("filename"):
+                image["url"] = f"{request.host_url}uploads/staff_images/{image['filename']}"
+        
+        return {
+            "success": True,
+            "count": len(images),
+            "images": images,
+            "status": 200
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Erreur lors de la récupération des images : {str(e)}",
+            "status": 500
+        }
+
+
+def get_image_by_id_service(image_id):
+    """
+    Récupère une image par son ID.
+    
+    :param image_id: ID de l'image
+    :return: Dictionnaire contenant l'image et le statut
+    """
+    try:
+        from bson import ObjectId
+        
+        if not ObjectId.is_valid(image_id):
+            return {
+                "success": False,
+                "message": "ID invalide",
+                "status": 400
+            }
+        
+        image = ImageStaffModel.collection.find_one({"_id": ObjectId(image_id)})
+        
+        if not image:
+            return {
+                "success": False,
+                "message": "Image non trouvée",
+                "status": 404
+            }
+        
+        image["_id"] = str(image["_id"])
+        if image.get("filename"):
+            image["url"] = f"{request.host_url}uploads/staff_images/{image['filename']}"
+        
+        return {
+            "success": True,
+            "image": image,
+            "status": 200
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Erreur lors de la récupération de l'image : {str(e)}",
+            "status": 500
+        }
+
+

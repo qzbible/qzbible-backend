@@ -331,31 +331,170 @@ def get_all_magasin():
     except Exception as e:
         return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
       
-
 @magasin_bp.route('/search', methods=['GET'])
 def search_magasins():
     """
-    Endpoint pour rechercher des magasins avec filtres multiples
-    Query params: search, pays, ville, quartier
+    Recherche de magasins avec filtres multiples
+    ---
+    tags:
+      - Magasins
+    summary: Recherche et filtre les magasins
+    description: Permet de rechercher des magasins par dénomination, pays, ville et/ou quartier. Tous les paramètres sont optionnels et peuvent être combinés.
+    
+    parameters:
+      - name: search
+        in: query
+        type: string
+        required: false
+        description: Recherche par dénomination du magasin (insensible à la casse)
+        example: "Carrefour"
+      - name: pays
+        in: query
+        type: string
+        required: false
+        description: Filtrer par pays
+        example: "Cameroun"
+      - name: ville
+        in: query
+        type: string
+        required: false
+        description: Filtrer par ville
+        example: "Yaoundé"
+      - name: quartier
+        in: query
+        type: string
+        required: false
+        description: Filtrer par quartier
+        example: "Bastos"
+    
+    responses:
+      200:
+        description: Liste des magasins filtrés récupérée avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            count:
+              type: integer
+              description: Nombre de magasins trouvés
+              example: 5
+            filters:
+              type: object
+              description: Filtres appliqués
+              properties:
+                search:
+                  type: string
+                  example: "Super"
+                pays:
+                  type: string
+                  example: "Cameroun"
+                ville:
+                  type: string
+                  example: "Douala"
+                quartier:
+                  type: string
+                  example: "Akwa"
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  _id:
+                    type: string
+                    example: "60d5ec49f1b2c8a9e4f3b1a2"
+                  denomination:
+                    type: string
+                    example: "Super Marché Central"
+                  pays:
+                    type: string
+                    example: "Cameroun"
+                  ville:
+                    type: string
+                    example: "Yaoundé"
+                  quartier:
+                    type: string
+                    example: "Centre-ville"
+                  email:
+                    type: string
+                    example: "contact@supermarche.cm"
+                  activité:
+                    type: string
+                    example: "Commerce de détail"
+                  logo:
+                    type: string
+                    example: "http://localhost:5000/uploads/images/logo_magasin.png"
+                  licence:
+                    type: object
+                    properties:
+                      max_managers:
+                        type: integer
+                        example: 5
+                      max_livreurs:
+                        type: integer
+                        example: 10
+                  is_active:
+                    type: boolean
+                    example: true
+                  created_at:
+                    type: string
+                    format: date-time
+                  utilisateurs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                        role:
+                          type: string
+      500:
+        description: Erreur serveur lors de la recherche
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
+              example: "Erreur lors de la récupération des magasins : ..."
     """
     search_query = request.args.get('search', None)
     pays = request.args.get('pays', None)
     ville = request.args.get('ville', None)
     quartier = request.args.get('quartier', None)
+    
     try:
-      magasins = search_magasins_service(
-          search_query=search_query,
-          pays=pays,
-          ville=ville,
-          quartier=quartier
-      )
-      
-      return jsonify({ 
-          "data": magasins
-      }), 200
+        magasins = search_magasins_service(
+            search_query=search_query,
+            pays=pays,
+            ville=ville,
+            quartier=quartier
+        )
+        
+        return jsonify({
+            "success": True,
+            "count": len(magasins),
+            "filters": {
+                "search": search_query,
+                "pays": pays,
+                "ville": ville,
+                "quartier": quartier
+            },
+            "data": magasins
+        }), 200
+        
     except Exception as e:
-      
-      return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
+        return jsonify({
+            "success": False,
+            "message": f"Erreur lors de la récupération des magasins : {str(e)}"
+        }), 500
 
 @magasin_bp.route("<string:magasin_id>/toggle-status", methods=["PUT"])
 @jwt_required()

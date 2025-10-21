@@ -1,5 +1,6 @@
 from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request, send_file, current_app
+from models.image_staff_model import ImageStaffModel
 from services.magasin_service import (
     update_magasin_service,
     delete_magasin_service,
@@ -11,6 +12,8 @@ import os
 from datetime import datetime
 from services.export_files_services import export_magasins_to_excel
 from services.stats_staff_service import (
+  get_all_images_service,
+  get_image_by_id_service,
   get_stats_utilisation_globale,
   get_utilisateurs_recents_connectes_service,
   get_top_magasin_par_chiffre_affaire,
@@ -707,3 +710,197 @@ def upload_image():
         return {"error": "Fichier manquant"}, 400
 
     return ajouter_image_service(data, file)
+
+
+
+@staff_bp.route("/images", methods=["GET"])
+# @role_required("staff")
+def get_all_images():
+    """
+    Liste toutes les images
+    ---
+    tags:
+      - Images Staff
+    summary: Liste toutes les images uploadées par le staff
+    description: Récupère toutes les images avec leurs URLs complètes
+    
+    responses:
+      200:
+        description: Liste des images récupérée avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            count:
+              type: integer
+              example: 15
+            images:
+              type: array
+              items:
+                type: object
+                properties:
+                  _id:
+                    type: string
+                    example: "60d5ec49f1b2c8a9e4f3b1a2"
+                  nom:
+                    type: string
+                    example: "Logo Entreprise"
+                  description:
+                    type: string
+                    example: "Logo principal"
+                  categorie:
+                    type: string
+                    example: "branding"
+                  filename:
+                    type: string
+                    example: "logo.png"
+                  url:
+                    type: string
+                    example: "http://localhost:5000/uploads/staff_images/logo.png"
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                    example: ["logo", "officiel"]
+                  created_at:
+                    type: string
+                    format: date-time
+      401:
+        description: Non autorisé
+      500:
+        description: Erreur serveur
+    """
+    result = get_all_images_service()
+    return jsonify(result), result["status"]
+
+
+@staff_bp.route("/images/<image_id>", methods=["GET"])
+# @role_required("staff")
+def get_image_by_id(image_id):
+    """
+    Récupère une image par son ID
+    ---
+    tags:
+      - Images Staff
+    summary: Détails d'une image
+    description: Récupère les informations complètes d'une image spécifique
+    
+    parameters:
+      - name: image_id
+        in: path
+        type: string
+        required: true
+        description: ID de l'image
+        example: "60d5ec49f1b2c8a9e4f3b1a2"
+    
+    responses:
+      200:
+        description: Image trouvée
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            image:
+              type: object
+      400:
+        description: ID invalide
+      404:
+        description: Image non trouvée
+      401:
+        description: Non autorisé
+      500:
+        description: Erreur serveur
+    """
+    result = get_image_by_id_service(image_id)
+    return jsonify(result), result["status"]
+
+
+@staff_bp.route("/images/by-category", methods=["GET"])
+# @role_required("staff")
+def get_images_by_category():
+    """
+    Liste les images groupées par catégorie
+    ---
+    tags:
+      - Images Staff
+    summary: Images groupées par catégorie
+    description: Récupère toutes les images organisées par catégorie avec un résumé
+    
+    responses:
+      200:
+        description: Images groupées avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            total:
+              type: integer
+              description: Nombre total d'images
+              example: 15
+            categories_count:
+              type: integer
+              description: Nombre de catégories
+              example: 5
+            summary:
+              type: object
+              description: Nombre d'images par catégorie
+              example:
+                branding: 3
+                marketing: 5
+                produits: 7
+            categories:
+              type: object
+              description: Images groupées par catégorie
+              additionalProperties:
+                type: array
+                items:
+                  type: object
+      401:
+        description: Non autorisé
+      500:
+        description: Erreur serveur
+    """
+    result = get_images_by_category_service()
+    return jsonify(result), result["status"]
+
+
+@staff_bp.route("/images/<image_id>", methods=["DELETE"])
+# @role_required("staff")
+def delete_image(image_id):
+    """
+    Supprime une image
+    ---
+    tags:
+      - Images Staff
+    summary: Suppression d'une image
+    description: Supprime une image de la base de données et du serveur
+    
+    parameters:
+      - name: image_id
+        in: path
+        type: string
+        required: true
+        description: ID de l'image à supprimer
+    
+    responses:
+      200:
+        description: Image supprimée avec succès
+      400:
+        description: ID invalide
+      404:
+        description: Image non trouvée
+      401:
+        description: Non autorisé
+      500:
+        description: Erreur serveur
+    """
+    result = ImageStaffModel.supprimer_image(image_id)
+    
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    
+    return jsonify(result), 200

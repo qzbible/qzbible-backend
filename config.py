@@ -49,9 +49,37 @@ class Config:
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
 
     # Dossier pour les images uploadées
-    UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads", "images")
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 Mo max
+    # UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads", "images")
+    # MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 Mo max
     # Durée de vie du token de validation par email (ex: 1 jour)
     VALIDATION_TOKEN_EXPIRES = 86400  # secondes = 24 heures
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads", "images")
-    STAFF_IMAGE_FOLDER = os.path.join(os.getcwd(), "uploads", "staff_images")
+    # STAFF_IMAGE_FOLDER = os.path.join(os.getcwd(), "uploads", "staff_images")
+
+
+    # Dossier racine du projet
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    
+    # Dossier principal pour tous les uploads
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'images')
+    
+    # Dossier pour les images uploadées par le staff
+    STAFF_IMAGE_FOLDER = os.path.join(BASE_DIR, 'uploads', 'images', 'staff')
+    
+    # Dossier contenant les images par défaut à initialiser
+    DEFAULT_IMAGES_FOLDER = os.path.join(BASE_DIR, 'images')
+    
+    # Taille maximale des fichiers (en bytes) - 5 MB par défaut
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+    
+    # Extensions de fichiers autorisées
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
+    
+     
+    
+    @staticmethod
+    def init_app(app):
+        """Initialise les dossiers nécessaires"""
+        os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+        os.makedirs(Config.STAFF_IMAGE_FOLDER, exist_ok=True)
+        os.makedirs(Config.DEFAULT_IMAGES_FOLDER, exist_ok=True)
