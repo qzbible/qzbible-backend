@@ -17,12 +17,58 @@ resend_otp_schema = ResendOTPSchema()
 @otp_bp.route('/send', methods=['POST'])
 def send_otp():
     """
-    Génère et envoie un OTP par email
+    Envoyer un code OTP par email
     ---
-    Body JSON:
-    {
-        "email": "user@example.com"
-    }
+    tags:
+      - OTP
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+              example: "user@example.com"
+    responses:
+      200:
+        description: Code OTP envoyé avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Code OTP envoyé avec succès"
+            email:
+              type: string
+              example: "user@example.com"
+      400:
+        description: Données invalides
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            errors:
+              type: object
+      500:
+        description: Erreur serveur
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
     """
     try:
         # Valider les données
@@ -59,13 +105,65 @@ def send_otp():
 @otp_bp.route('/verify', methods=['POST'])
 def verify_otp():
     """
-    Vérifie un code OTP
+    Vérifier un code OTP
     ---
-    Body JSON:
-    {
-        "email": "user@example.com",
-        "code": "123456"
-    }
+    tags:
+      - OTP
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - code
+          properties:
+            email:
+              type: string
+              format: email
+              example: "user@example.com"
+            code:
+              type: string
+              example: "123456"
+              minLength: 6
+              maxLength: 6
+    responses:
+      200:
+        description: Code OTP vérifié avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Code OTP vérifié avec succès"
+      401:
+        description: Code OTP incorrect ou expiré
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
+            attempts_remaining:
+              type: integer
+      400:
+        description: Données invalides
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            errors:
+              type: object
+      500:
+        description: Erreur serveur
     """
     try:
         # Valider les données
@@ -95,12 +193,47 @@ def verify_otp():
 @otp_bp.route('/resend', methods=['POST'])
 def resend_otp():
     """
-    Renvoie un nouveau code OTP
+    Renvoyer un nouveau code OTP
     ---
-    Body JSON:
-    {
-        "email": "user@example.com"
-    }
+    tags:
+      - OTP
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+              example: "user@example.com"
+    responses:
+      200:
+        description: Nouveau code OTP envoyé avec succès
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Nouveau code OTP envoyé avec succès"
+      400:
+        description: Données invalides
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            errors:
+              type: object
+      500:
+        description: Erreur serveur
     """
     try:
         # Valider les données
@@ -136,7 +269,52 @@ def resend_otp():
 @otp_bp.route('/status/<email>', methods=['GET'])
 def otp_status(email):
     """
-    Vérifie le statut d'un OTP pour un email donné
+    Vérifier le statut d'un OTP pour un email donné
+    ---
+    tags:
+      - OTP
+    parameters:
+      - in: path
+        name: email
+        type: string
+        required: true
+        description: Email de l'utilisateur
+        example: "user@example.com"
+    responses:
+      200:
+        description: Statut de l'OTP récupéré
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            exists:
+              type: boolean
+              example: true
+            message:
+              type: string
+            data:
+              type: object
+              properties:
+                email:
+                  type: string
+                created_at:
+                  type: string
+                  format: date-time
+                expires_at:
+                  type: string
+                  format: date-time
+                time_remaining_seconds:
+                  type: integer
+                attempts:
+                  type: integer
+                attempts_remaining:
+                  type: integer
+                is_verified:
+                  type: boolean
+      500:
+        description: Erreur serveur
     """
     try:
         otp_info = OTPModel.get_otp_info(email)
