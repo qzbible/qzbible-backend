@@ -106,39 +106,36 @@ def send_otp_mail(to_email, code_auth):
             "otp/2FA-auth-fr.html",
             code_auth= code_auth
         )
-    except TemplateNotFound as e:
-        print("❌ Template non trouvé :", e)
-        return
-    except Exception as e:
-        print("❌ Erreur de rendu du template :", e)
-        return
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Code d'authentification"
-    msg["From"] = current_app.config["MAIL_SENDER"]
-    msg["To"] = to_email
-    
-    # Version texte (fallback si HTML pas supporté)
-    plain_text = f"""
-    Bonjour  👋,
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Code d'authentification"
+        msg["From"] = current_app.config["MAIL_SENDER"]
+        msg["To"] = to_email
+        print('email and code', to_email, code_auth )
+        # Version texte (fallback si HTML pas supporté)
+        plain_text = f"""
+        Bonjour  👋,
 
-    Votre code d'authentification est : {code_auth}
-     
-    L’équipe de la plateforme.
-    """
-    
-    msg.attach(MIMEText(plain_text, "plain"))
-    msg.attach(MIMEText(html_content, "html"))
-    #print("Contenu HTML de l'email de création de compte :", html_content)
-    #print("Envoi de l'email de création de compte à", to_email, "procédé.")
-    try:
+        Votre code d'authentification est : {code_auth}
+        
+        L’équipe de la plateforme.
+        """
+        
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
         with smtplib.SMTP(current_app.config["EMAIL_HOST"], current_app.config["EMAIL_PORT"]) as server:
             if current_app.config["EMAIL_USE_TLS"]:
                 server.starttls()
             server.login(current_app.config["EMAIL_HOST_USER"], current_app.config["EMAIL_HOST_PASSWORD"])
             server.send_message(msg)
             print("✅ Email envoyé à", to_email)
+        return True
+    except TemplateNotFound as e:
+        print("❌ Template non trouvé :", e)
+        return False
     except Exception as e:
-        print("❌ Erreur d'envoi de mail :", e)
+        print("❌ Erreur de rendu du template :", e)
+        return False
+     
 
 
 # Fonction pour envoyer un email de réinitialisation de mot de passe
