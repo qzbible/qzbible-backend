@@ -45,6 +45,8 @@ def create_app():
     from routes.livraison_routes import livraison_bp
     from routes.dashboard_routes import dashboard_bp
     from routes.notification_routes import notification_bp
+
+    from routes.otp_routes import otp_bp
     
     app.register_blueprint(user_bp)
     app.register_blueprint(magasin_bp)
@@ -58,6 +60,8 @@ def create_app():
     app.register_blueprint(livraison_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(notification_bp)
+
+    app.register_blueprint(otp_bp)
     
     # CORS : autoriser le front React à communiquer avec le backend
     CORS(app, supports_credentials=True, origins=[Config.ALLOWED_ORIGINS])
