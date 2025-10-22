@@ -7,6 +7,7 @@ from flask_mail import Mail
 from config import Config
 from flask_cors import CORS
 from extensions import mongo, jwt, mail
+from models.otp_model import OTPModel
 from werkzeug.exceptions import HTTPException
 from bson.errors import InvalidId
 from flasgger import Swagger
@@ -30,6 +31,9 @@ def create_app():
     mongo.init_app(app)
     jwt.init_app(app)
     mail.init_app(app)
+
+    with app.app_context():
+        OTPModel.initialize_indexes()
     Config.init_app(app)
     
     # Enregistrement des Blueprints
