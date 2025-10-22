@@ -21,6 +21,7 @@ def create_app():
     
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.config.from_object(Config)
+    app.config['DEBUG'] = True
     # Créer automatiquement le dossier d'upload si nécessaire
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     # Créer automatiquement le dossier pour les images de staff si nécessaire
