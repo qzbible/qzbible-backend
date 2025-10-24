@@ -33,8 +33,7 @@ def create_app():
     jwt.init_app(app)
     mail.init_app(app)
 
-    with app.app_context():
-        OTPModel.initialize_indexes()
+
     Config.init_app(app)
     
     # Enregistrement des Blueprints
@@ -95,6 +94,26 @@ def create_app():
             "message": "Documentation de l'API",
             "url": "/apidocs/"
         }), 200
+    
+    @app.route('/test-db')
+    def test_db():
+        try:
+            # Ping MongoDB
+            mongo.db.command('ping')
+            
+            # Lister les collections
+            collections = mongo.db.list_collection_names()
+            
+            return jsonify({
+                "status": "✅ Connexion MongoDB OK",
+                "database": mongo.db.name,
+                "collections": collections
+            }), 200
+        except Exception as e:
+            return jsonify({
+                "status": "❌ Erreur de connexion",
+                "error": str(e)
+            }), 500
     
      
     swagger = Swagger(app, template={

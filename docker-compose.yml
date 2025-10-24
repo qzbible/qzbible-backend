@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest # Utilise l'image officielle de MongoDB
+    container_name: mon_mongo # Nom du conteneur (optionnel)
+    ports:
+      - "27017:27017" # Mappe le port 27017 de l'hôte au port 27017 du conteneur
+    volumes:
+      - mongo_data:/data/db # Persiste les données en utilisant un volume géré par Docker
+    environment:
+      # Facultatif : pour définir un utilisateur et un mot de passe par défaut (remplacez "admin" et "password" par vos propres identifiants)
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    restart: always # Redémarre le conteneur automatiquement en cas de crash
+
+volumes:
+  mongo_data: # Définit le volume nommé pour la persistance des données
