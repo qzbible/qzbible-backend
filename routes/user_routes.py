@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils.decorators import admin_required, staff_required
-from utils.inject_magasin_id import inject_magasin_id
+from utils.inject_magasin_id import inject_magasin_id, inject_magasin_id_with_email
 from utils.decorators import role_required
 from models.user_model import UserModel
 from services.user_service import (   
+    create_simple_user,
     create_staff_account,
     create_admin_account,
     activate_user_by_email, 
@@ -224,6 +225,7 @@ def activate_user_with_id(id):
        
     return jsonify(result), result.get("status", 200)
 
+
 # Le staff peut desactiver un compte un utilisateur via son id
 @user_bp.route('/deactivate-user/<string:id>', methods=['PUT'])
 @role_required("admin", "staff", "manager")
@@ -267,7 +269,6 @@ def deactivate_user_with_id(id):
 
 
 #Créer un livreur  
-
 @user_bp.route('/create_livreur', methods=['POST'])
 @jwt_required()
 @admin_required
@@ -438,6 +439,66 @@ def get_current_user():
 
     user['_id'] = str(user['_id'])
     return jsonify(user), 200
+
+
+
+#Créer un livreur  
+@user_bp.route('/create_user', methods=['POST'])
+def create__simple_user_route():
+    """
+    Créer un nouveau livreur pour un magasin.
+    ---
+    tags:
+      - Utilisateurs
+    parameters:
+      - in: body
+        name: body
+        required: true
+        description: Informations du livreur
+        schema:
+          type: object
+          required:
+            - name
+            - age_group
+            - email
+            - church_id
+          properties:
+            name:
+              type: string
+              example: "Doe"
+            age_group:
+              type: string
+              example: "10-18 ans"
+            email:
+              type: string
+              example: "john.doe@email.com"
+            church_id:
+              type: string
+              example: "66325fd5379a7338c9cd51a1"
+    responses:
+      200:
+        description: Livreur créé avec succès
+      400:
+        description: Tous les champs sont requis
+    """
+    data = request.get_json()
+    name = data.get('name')
+    age_group = data.get('age_group')
+    email = data.get('email')
+    church_id = data.get('church_id')
+    password = data.get('password')
+    
+    if not name or not age_group or not email or not church_id:
+        return jsonify({"error": "Tous les champs sont requis"}), 400
+    if not password:
+        return jsonify({"error": "Le mot de passe est requis"}), 400
+    result = create_simple_user(name, age_group, email, password,  church_id)
+    if isinstance(result, tuple):
+          data, status = result
+    else:
+        data, status = result, 200
+    
+    return jsonify(data), status
 
 
 UPLOAD_FOLDER = 'uploads/avatars'

@@ -64,7 +64,6 @@ def create_admin_account(name, first_name, email, password, magasin_id):
     return jsonify({"message": "Compte admin créé. Un email de validation a été envoyé."}), 201
 
 
-
 # Activer un compte utilisateur par email
 def activate_user_by_email(email, password):
     try:
@@ -99,7 +98,6 @@ def activate_user_by_email(email, password):
 def activate_user_by_id(user_id):
     try:
         user = UserModel.find_by_id(user_id)
-        print("ID de l'utilisateur :", user_id)
         if not user:
             return {"message": "Utilisateur introuvable", "status": 404}
 
@@ -233,6 +231,45 @@ def create_livreur(name, first_name, email, password, magasin_id):
             "first_name": first_name,
             "email": email,
             "role": "livreur",
+            "password": password
+        }
+        send_validation_email_creation_account(email, credentials)
+
+        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201}
+    
+    except Exception as e:
+        return {"message": f"Erreur lors de la création du compte livreur : {str(e)}", "status": 500}
+  
+  
+
+# Créer un compte livreur
+def create_simple_user(name, first_name, email, password, magasin_id):
+    """
+    Crée un compte simple avec les informations fournies.
+    
+    :param name: Nom du user
+    :param first_name: Prénom du user
+    :param email: Email du suer
+    :param password: Mot de passe du user
+    :return: Dictionnaire contenant le message et l'ID du livreur créé
+    """
+    
+    """
+    verifie si la limite n'est pas atteinte.
+    """
+   
+    try:
+        existing_user = UserModel.find_by_email(email)
+        if existing_user:
+            return {"message": "Un compte avec cet email existe déjà.", "status": 400}
+
+        user_id = UserModel.create_simple_user(name=name, first_name=first_name, email=email,password=password, magasin_id=magasin_id)
+         
+        credentials = {
+            "name": name,
+            "first_name": first_name,
+            "email": email,
+            "role": "simple_user",
             "password": password
         }
         send_validation_email_creation_account(email, credentials)

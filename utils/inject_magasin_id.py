@@ -23,3 +23,17 @@ def inject_magasin_id(data: dict) -> dict:
 
     data["magasin_id"] = str(magasin_id)
     return data
+
+
+def inject_magasin_id_with_email(data: dict, email:str) -> dict:
+   
+    user = UserModel.find_by_email(email)
+    if not user:
+        raise Exception("Utilisateur introuvable ou non authentifié.")
+
+    magasin_id = user.get("magasin_id")
+    if not magasin_id:
+        raise Exception("Aucun magasin associé à cet utilisateur.")
+
+    data["magasin_id"] = str(magasin_id)
+    return data

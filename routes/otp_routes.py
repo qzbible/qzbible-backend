@@ -2,6 +2,7 @@
 
 from flask import Blueprint, request, jsonify
 from marshmallow import ValidationError
+from models.user_model import UserModel
 from schemas.otp_schemas import SendOTPSchema, VerifyOTPSchema, ResendOTPSchema
 from models.otp_model import OTPModel
 from utils.email import send_otp_mail
@@ -74,7 +75,13 @@ def send_otp():
         # Valider les données
         data = send_otp_schema.load(request.get_json())
         email = data['email']
-        
+        existing_user = UserModel.find_by_email(email)
+        if existing_user:
+            return jsonify({
+                "success": True,
+                "message": "Un utilisateur avec cet email existe déjà.",
+                'user':existing_user
+            }), 409
         # Créer l'OTP
         otp_code = OTPModel.create_otp(email, expiration_minutes=10)
         

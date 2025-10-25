@@ -77,6 +77,21 @@ class UserModel:
         }
         result = UserModel.get_collection().insert_one(user)
         return str(result.inserted_id)
+    
+    @staticmethod
+    def create_simple_user(name, age_group, email, password, church_id):
+        user = {
+            "name" : name,
+            "age_group": age_group,
+            "email": email.lower(),
+            "role": "simple_user",
+            "password": bcrypt.generate_password_hash(password),
+            "church_id": ObjectId(church_id),
+            "is_active": True,
+            "created_at": datetime.utcnow()
+        }
+        result = UserModel.get_collection().insert_one(user)
+        return str(result.inserted_id)
 
     @staticmethod
     def activate_user(user_id, password):
