@@ -243,12 +243,12 @@ def create_livreur(name, first_name, email, password, magasin_id):
   
 
 # Créer un compte livreur
-def create_simple_user(name, first_name, email, password, magasin_id):
+def create_simple_user(name, age_group, email, password, church_id):
     """
     Crée un compte simple avec les informations fournies.
     
     :param name: Nom du user
-    :param first_name: Prénom du user
+    :param age_group: Groupe d'âge du user
     :param email: Email du suer
     :param password: Mot de passe du user
     :return: Dictionnaire contenant le message et l'ID du livreur créé
@@ -263,11 +263,11 @@ def create_simple_user(name, first_name, email, password, magasin_id):
         if existing_user:
             return {"message": "Un compte avec cet email existe déjà.", "status": 400}
 
-        user_id = UserModel.create_simple_user(name=name, first_name=first_name, email=email,password=password, magasin_id=magasin_id)
+        user_id = UserModel.create_simple_user(name=name, age_group=age_group, email=email, password=password, church_id=church_id)
          
         credentials = {
             "name": name,
-            "first_name": first_name,
+            "first_name": age_group,
             "email": email,
             "role": "simple_user",
             "password": password
