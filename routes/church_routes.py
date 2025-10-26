@@ -1,37 +1,39 @@
 from flask import Blueprint, request, jsonify
 import json
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from schemas.magasin_schema import CreateMagasinSchema, MagasinUpdateSchema
-from services.magasin_service import (
-  create_magasin,
-  search_magasins_service, 
-  update_magasin_service, 
-  get_magasin_service, 
-  delete_magasin_service,
-  get_all_magasin_service,
-  toggle_magasin_status_service
+from schemas.church_schema import ChurchUpdateSchema, CreateChurchSchema
+
+
+from services.church_service import (
+  create_church,
+  search_churchs_service, 
+  update_church_service, 
+  get_church_service, 
+  delete_church_service,
+  get_all_church_service,
+  toggle_church_status_service
   )
 
 from utils.decorators import staff_required, admin_required, role_required
-from utils.inject_magasin_id import inject_magasin_id
+from utils.inject_church_id import inject_church_id
 from models.user_model import UserModel  
 
-magasin_bp = Blueprint("magasin", __name__, url_prefix="/magasin")
+church_bp = Blueprint("church", __name__, url_prefix="/church")
 
 """
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc1MzM1NjQ3OSwianRpIjoiYTBmMzA1ZTItZGE0YS00ZmZiLWJjMmItZjg3NTc3YjgzZDAyIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjY4MTI0ODU0ODI0MGU0NGVlZjE4MzE2NyIsIm5iZiI6MTc1MzM1NjQ3OSwiZXhwIjoxNzUzODk2NDc5LCJyb2xlIjoic3RhZmYifQ.jR4J3dwXfC08NvkbR0l2CQYhsgCV3bWk72gWadDI4_M
 """
 
-# Créer un magasin uniqment par le staff
-@magasin_bp.route("/create", methods=["POST"])
+# Créer un church uniqment par le staff
+@church_bp.route("/create", methods=["POST"])
 @jwt_required()
 @staff_required
 def create():
     """
-    Créer un nouveau magasin avec sa licence et les informations de l’admin.
+    Créer un nouveau church avec sa licence et les informations de l’admin.
     ---
     tags:
-      - Magasins
+      - Churchs
     consumes:
       - multipart/form-data
     parameters:
@@ -91,10 +93,10 @@ def create():
         name: image
         type: file
         required: false
-        description: Logo ou image du magasin (format image)
+        description: Logo ou image du church (format image)
     responses:
       200:
-        description: Magasin créé avec succès
+        description: church créé avec succès
       400:
         description: Données manquantes ou invalides
       401:
@@ -113,12 +115,12 @@ def create():
 
 
         # Valider les données
-        errors = CreateMagasinSchema().validate(data)
+        errors = CreateChurchSchema().validate(data)
         if errors:
             return jsonify({"errors": errors}), 400
 
         # Appeler le service
-        result = create_magasin(data, logo_file)
+        result = create_church(data, logo_file)
         return jsonify(result), result.get("status", 200)
 
     except Exception as e:
@@ -126,18 +128,18 @@ def create():
 
 
 
-# Mettre à jour les données d'un magasin (staff et admin)
-@magasin_bp.route('/update/<string:magasin_id>', methods=['PUT'])
+# Mettre à jour les données d'un church (staff et admin)
+@church_bp.route('/update/<string:church_id>', methods=['PUT'])
 @jwt_required()
 @role_required("staff")
-def update_magasin(magasin_id):
+def update_church(church_id):
     """
-    Met à jour un magasin selon les permissions de l'utilisateur connecté.
+    Met à jour un church selon les permissions de l'utilisateur connecté.
     ---
     tags:
-      - Magasins
+      - Churchs
     parameters:
-      - name: magasin_id
+      - name: church_id
         in: path
         required: true
         type: string
@@ -169,7 +171,7 @@ def update_magasin(magasin_id):
       - bearerAuth: []
     responses:
       200:
-        description: Magasin mis à jour
+        description: church mis à jour
       403:
         description: Accès non autorisé
     """
@@ -182,92 +184,92 @@ def update_magasin(magasin_id):
     # Récupérer les données de la requête
    
     update_data = request.get_json()
-    errors = MagasinUpdateSchema().validate(update_data)
+    errors = ChurchUpdateSchema().validate(update_data)
     if errors:
         return jsonify({"errors": errors}), 400
 
-    return update_magasin_service(magasin_id, update_data, user["role"])
+    return update_church_service(church_id, update_data, user["role"])
   
   
   
   
-  #récupérer un magasin
-@magasin_bp.route('/', methods=['GET'])
+  #récupérer un church
+@church_bp.route('/', methods=['GET'])
 
 @role_required("admin", "staff", "manager", "livreur")
 @jwt_required()
-def get_info_magasin():
+def get_info_church():
     """
-    Récupérer un magasin par son ID.
+    Récupérer un church par son ID.
     ---
     tags:
-      - Magasins
+      - Churchs
     parameters:
-      - name: magasin_id
+      - name: church_id
         in: path
         required: true
         type: string
     responses:
       200:
-        description: Magasin trouvé
+        description: church trouvé
       404:
-        description: Magasin non trouvé
+        description: church non trouvé
     """
     data = {}
-    data = inject_magasin_id(data)
-    magasin_id = data.get("magasin_id")
-    if not magasin_id:
-        return jsonify({"message": "ID de magasin manquant"}), 400
-    magasin = get_magasin_service(magasin_id)
+    data = inject_church_id(data)
+    church_id = data.get("church_id")
+    if not church_id:
+        return jsonify({"message": "ID de church manquant"}), 400
+    church = get_church_service(church_id)
     
-    if magasin:
-        return jsonify(magasin), 200
+    if church:
+        return jsonify(church), 200
     else:
-        return jsonify({"message": "Magasin non trouvé"}), 404
+        return jsonify({"message": "church non trouvé"}), 404
       
       
-  #récupérer un magasin par son id
-@magasin_bp.route('/<string:magasin_id>', methods=['GET'])
+  #récupérer un church par son id
+@church_bp.route('/<string:church_id>', methods=['GET'])
 @role_required("admin", "staff", "manager", "livreur")
 @jwt_required()
-def get_info_magasin_details(magasin_id):
+def get_info_church_details(church_id):
     """
-    Récupérer un magasin par son ID.
+    Récupérer un church par son ID.
     ---
     tags:
-      - Magasins
+      - Churchs
     parameters:
-      - name: magasin_id
+      - name: church_id
         in: path
         required: true
         type: string
     responses:
       200:
-        description: Magasin trouvé
+        description: church trouvé
       404:
-        description: Magasin non trouvé
+        description: church non trouvé
     """
-    if not magasin_id:
-        return jsonify({"message": "ID de magasin manquant"}), 400
-    magasin = get_magasin_service(magasin_id)
+    if not church_id:
+        return jsonify({"message": "ID de church manquant"}), 400
+    church = get_church_service(church_id)
     
-    if magasin:
-        return jsonify(magasin), 200
+    if church:
+        return jsonify(church), 200
     else:
-        return jsonify({"message": "Magasin non trouvé"}), 404
+        return jsonify({"message": "church non trouvé"}), 404
 
 
 
-# Supprimer un magasin
-@magasin_bp.route('/delete/<string:magasin_id>', methods=['DELETE'])
+# Supprimer un church
+@church_bp.route('/delete/<string:church_id>', methods=['DELETE'])
 @jwt_required()
 @role_required("staff")
-def delete_magasin(magasin_id):
+def delete_church(church_id):
     """
-    Supprimer un magasin par son ID.
+    Supprimer un church par son ID.
     ---
     tags:
-      - Magasins
+      - Churchs
     parameters:
       - in: header
         name: Authorization
@@ -276,15 +278,15 @@ def delete_magasin(magasin_id):
           type: string
         example: "Bearer votre.jwt.token"
     
-      - name: magasin_id
+      - name: church_id
         in: path
         required: true
         type: string
     responses:
       200:
-        description: Magasin supprimé avec succès
+        description: church supprimé avec succès
       404:
-        description: Magasin non trouvé
+        description: church non trouvé
     """
     user_id = get_jwt_identity()
     user = UserModel.get_user_by_id(user_id)
@@ -292,9 +294,9 @@ def delete_magasin(magasin_id):
     if not user or user["role"] != "staff":
         return jsonify({"message": "Accès non autorisé"}), 403
     
-    result = delete_magasin_service(magasin_id)
+    result = delete_church_service(church_id)
     if not result:
-        return jsonify({"message": "Magasin non trouvé"}), 404
+        return jsonify({"message": "church non trouvé"}), 404
     
     if result["status"] == 200:
         return jsonify({"message": result["message"]}), 200
@@ -302,16 +304,16 @@ def delete_magasin(magasin_id):
         return jsonify({"message": result["message"]}), result["status"]
       
 
-# Récupérer tous les magasins
-@magasin_bp.route('/all', methods=['GET'])
+# Récupérer tous les churchs
+@church_bp.route('/all', methods=['GET'])
 # @jwt_required()
 # @role_required("staff")
-def get_all_magasin():
+def get_all_church():
     """
-    Récupérer tous les magasins.
+    Récupérer tous les churchs.
     ---
     tags:
-      - Magasins
+      - Churchs
     parameters:
       - in: header
         name: Authorization
@@ -321,32 +323,32 @@ def get_all_magasin():
         example: "Bearer votre.jwt.token"
     responses:
       200:
-        description: Liste de tous les magasins
+        description: Liste de tous les churchs
       500:
         description: Erreur serveur
     """
     try:
-        magasins = get_all_magasin_service()
-        return jsonify({"church": magasins}), 200
+        churchs = get_all_church_service()
+        return jsonify({"church": churchs}), 200
     except Exception as e:
-        return jsonify({"message": f"Erreur lors de la récupération des magasins : {str(e)}"}), 500
+        return jsonify({"message": f"Erreur lors de la récupération des churchs : {str(e)}"}), 500
       
-@magasin_bp.route('/search', methods=['GET'])
-def search_magasins():
+@church_bp.route('/search', methods=['GET'])
+def search_churchs():
     """
-    Recherche de magasins avec filtres multiples
+    Recherche de churchs avec filtres multiples
     ---
     tags:
-      - Magasins
-    summary: Recherche et filtre les magasins
-    description: Permet de rechercher des magasins par dénomination, pays, ville et/ou quartier. Tous les paramètres sont optionnels et peuvent être combinés.
+      - Churchs
+    summary: Recherche et filtre les churchs
+    description: Permet de rechercher des churchs par dénomination, pays, ville et/ou quartier. Tous les paramètres sont optionnels et peuvent être combinés.
     
     parameters:
       - name: search
         in: query
         type: string
         required: false
-        description: Recherche par dénomination du magasin (insensible à la casse)
+        description: Recherche par dénomination du church (insensible à la casse)
         example: "Carrefour"
       - name: pays
         in: query
@@ -369,7 +371,7 @@ def search_magasins():
     
     responses:
       200:
-        description: Liste des magasins filtrés récupérée avec succès
+        description: Liste des churchs filtrés récupérée avec succès
         schema:
           type: object
           properties:
@@ -378,7 +380,7 @@ def search_magasins():
               example: true
             count:
               type: integer
-              description: Nombre de magasins trouvés
+              description: Nombre de churchs trouvés
               example: 5
             filters:
               type: object
@@ -463,7 +465,7 @@ def search_magasins():
               example: false
             message:
               type: string
-              example: "Erreur lors de la récupération des magasins : ..."
+              example: "Erreur lors de la récupération des churchs : ..."
     """
     search_query = request.args.get('search', None)
     pays = request.args.get('pays', None)
@@ -471,7 +473,7 @@ def search_magasins():
     quartier = request.args.get('quartier', None)
     
     try:
-        magasins = search_magasins_service(
+        churchs = search_churchs_service(
             search_query=search_query,
             pays=pays,
             ville=ville,
@@ -480,28 +482,28 @@ def search_magasins():
         
         return jsonify({
             "success": True,
-            "count": len(magasins),
+            "count": len(churchs),
             "filters": {
                 "search": search_query,
                 "pays": pays,
                 "ville": ville,
                 "quartier": quartier
             },
-            "data": magasins
+            "data": churchs
         }), 200
         
     except Exception as e:
         return jsonify({
             "success": False,
-            "message": f"Erreur lors de la récupération des magasins : {str(e)}"
+            "message": f"Erreur lors de la récupération des churchs : {str(e)}"
         }), 500
 
-@magasin_bp.route("<string:magasin_id>/toggle-status", methods=["PUT"])
+@church_bp.route("<string:church_id>/toggle-status", methods=["PUT"])
 @jwt_required()
 @staff_required
-def toggle_magasin_status_route(magasin_id):
+def toggle_church_status_route(church_id):
     """
-    Route pour activer ou désactiver un magasin.
+    Route pour activer ou désactiver un church.
     """
-    result = toggle_magasin_status_service(magasin_id)
+    result = toggle_church_status_service(church_id)
     return jsonify(result), result["status"]

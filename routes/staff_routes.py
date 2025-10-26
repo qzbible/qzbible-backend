@@ -1,51 +1,43 @@
 from flask_jwt_extended import jwt_required
 from flask import Blueprint, jsonify, request, send_file, current_app
 from models.image_staff_model import ImageStaffModel
-from services.magasin_service import (
-    update_magasin_service,
-    delete_magasin_service,
-    get_all_magasin_service,
-    toggle_magasin_status_service,
-    get_magasin_service
+ 
+from services.church_service import (
+    update_church_service,
+    delete_church_service,
+    get_all_church_service,
+    toggle_church_status_service,
+    get_church_service
 )
 import os
 from datetime import datetime
-from services.export_files_services import export_magasins_to_excel
+ 
 from services.stats_staff_service import (
-  get_all_images_service,
-  get_image_by_id_service,
-  get_stats_utilisation_globale,
+ 
   get_utilisateurs_recents_connectes_service,
-  get_top_magasin_par_chiffre_affaire,
-  get_nombre_magasins_total,
-  get_nombre_admins_managers_total,
-  get_nombre_livreurs_total,
-  get_nombre_clients_total,
+ 
   ajouter_image_service
 )
-from schemas.magasin_schema import MagasinUpdateSchema
+ 
 from utils.decorators import staff_required, role_required
 from schemas.image_staff_schema import ImageStaffSchema
 from marshmallow import ValidationError
 
 
-
-
-
 # Activer ou désactiver un magasin
 staff_bp = Blueprint('staff', __name__)
-@staff_bp.route('/magasins/<magasin_id>', methods=['PATCH'])
+@staff_bp.route('/church/<church_id>', methods=['PATCH'])
 @jwt_required()
 @staff_required
-def toggle_magasin(magasin_id):
+def toggle_church(church_id):
     """
-    Activer ou désactiver un magasin
+    Activer ou désactiver un church
     ---
     tags:
-      - Magasins
-    summary: Changer l'état d'activation d’un magasin (actif/inactif)
+      - Churchs
+    summary: Changer l'état d'activation d’une church (actif/inactif)
     description: >
-      Cette route permet d’activer ou de désactiver un magasin existant.  
+      Cette route permet d’activer ou de désactiver un church existant.  
       Accessible uniquement au personnel disposant du rôle "staff".
 
     parameters:
@@ -55,50 +47,50 @@ def toggle_magasin(magasin_id):
         required: true
         description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
         default: Bearer 
-      - name: magasin_id
+      - name: church_id
         in: path
         type: string
         required: true
-        description: ID du magasin à activer ou désactiver
+        description: ID du church à activer ou désactiver
         example: "60a7c9cf1234567890abcdef"
 
     responses:
       200:
-        description: Magasin activé ou désactivé avec succès
+        description: Church activé ou désactivé avec succès
         schema:
           type: object
           properties:
             message:
               type: string
-              example: "Magasin activé avec succès"
+              example: "Church activé avec succès"
       404:
-        description: Magasin non trouvé
+        description: Church non trouvé
         schema:
           type: object
           properties:
             error:
               type: string
-              example: "Magasin non trouvé"
+              example: "Church non trouvé"
       401:
         description: Non autorisé (JWT manquant ou invalide)
     """
-    return toggle_magasin_status_service(magasin_id)
+    return toggle_church_status_service(church_id)
 
 
 
 # Récupérer tous les magasins avec les utilisateurs associés
-@staff_bp.route('/magasins', methods=['GET'])
+@staff_bp.route('/churchs', methods=['GET'])
 @jwt_required()
 @staff_required
-def get_all_magasin():
+def get_all_church():
     """
-    Récupérer tous les magasins
+    Récupérer tous les churchs
     ---
     tags:
-      - Magasins
-    summary: Obtenir la liste de tous les magasins
+      - Churchs
+    summary: Obtenir la liste de tous les churchs
     description: >
-      Cette route permet de récupérer tous les magasins disponibles.  
+      Cette route permet de récupérer tous les churchs disponibles.  
       Accessible uniquement au personnel disposant du rôle "staff".
 
     parameters:
@@ -111,7 +103,7 @@ def get_all_magasin():
 
     responses:
       200:
-        description: Liste de tous les magasins récupérée avec succès
+        description: Liste de tous les churchs récupérée avec succès
         schema:
           type: array
           items:
@@ -122,7 +114,7 @@ def get_all_magasin():
                 example: "60a7c9cf1234567890abcdef"
               nom:
                 type: string
-                example: "Magasin Central"
+                example: "church Central"
               actif:
                 type: boolean
                 example: true
@@ -136,68 +128,24 @@ def get_all_magasin():
       401:
         description: Non autorisé (JWT manquant ou invalide)
     """
-    return get_all_magasin_service()
+    return get_all_church_service()
 
 
 
+ 
 
-
-
-# Supprimer un magasin
-@staff_bp.route('/magasins/<magasin_id>', methods=['DELETE'])
-@jwt_required()
-@role_required("staff")
-def delete_magasin(magasin_id):
-    """
-    Supprimer un magasin
-    ---
-    tags:
-      - Magasins
-    summary: Suppression d’un magasin par ID
-    description: >
-      Cette route permet à un membre du staff de supprimer un magasin à partir de son identifiant.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-      - name: magasin_id
-        in: path
-        type: string
-        required: true
-        description: ID du magasin à supprimer
-        example: "60a7c9cf1234567890abcdef"
-
-    responses:
-      200:
-        description: Magasin supprimé avec succès
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Magasin supprimé avec succès"
-      404:
-        description: Magasin non trouvé
-    """
-    return delete_magasin_service(magasin_id)
-
-
-# Récupérer un magasin par son ID
-@staff_bp.route('/magasins/<magasin_id>', methods=['GET'])
+# Récupérer un church par son ID
+@staff_bp.route('/churchs/<church_id>', methods=['GET'])
 @jwt_required()
 @role_required("admin", "manager", "staff")
-def get_magasin(magasin_id):
+def get_church(church_id):
     """
-    Récupérer un magasin par son ID
+    Récupérer un church par son ID
     ---
     tags:
-      - Magasins
-    summary: Détails d’un magasin spécifique
-    description: Cette route permet aux utilisateurs autorisés (admin, manager, staff) de consulter un magasin via son identifiant.
+      - Churchs
+    summary: Détails d’un church spécifique
+    description: Cette route permet aux utilisateurs autorisés (admin, manager, staff) de consulter un church via son identifiant.
 
     parameters:
       - name: Authorization
@@ -206,16 +154,16 @@ def get_magasin(magasin_id):
         required: true
         description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
         default: Bearer 
-      - name: magasin_id
+      - name: church_id
         in: path
         type: string
         required: true
-        description: ID du magasin à récupérer
+        description: ID du church à récupérer
         example: "60a7c9cf1234567890abcdef"
 
     responses:
       200:
-        description: Détails du magasin récupérés avec succès
+        description: Détails du church récupérés avec succès
         schema:
           type: object
           properties:
@@ -224,7 +172,7 @@ def get_magasin(magasin_id):
               example: "60a7c9cf1234567890abcdef"
             nom:
               type: string
-              example: "Magasin Central"
+              example: "church Central"
             statut:
               type: string
               example: "actif"
@@ -232,81 +180,10 @@ def get_magasin(magasin_id):
               type: string
               example: "Quartier Commercial, Douala"
       404:
-        description: Magasin non trouvé
+        description: church non trouvé
     """
-    return get_magasin_service(magasin_id)
-
-  
-  
-# Récupérer les statistiques d'utilisation de la plateforme
-@staff_bp.route("/stats/utilisation", methods=["GET"])
-@jwt_required()
-@role_required("staff")  
-def get_stats_utilisation():
-    """
-    Obtenir les statistiques globales d'utilisation de la plateforme
-    ---
-    tags:
-      - Statistiques
-    summary: Statistiques globales de la plateforme
-    description: >
-      Cette route retourne des données statistiques globales sur l’utilisation
-      de la plateforme avec possibilité d’agrégation par jour, semaine, mois ou année.
-      La pagination est également disponible via le paramètre `page`.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-      - name: granularite
-        in: query
-        type: string
-        required: false
-        enum: [jour, semaine, mois, annee]
-        description: Granularité d’agrégation des statistiques
-        example: "semaine"
-      - name: page
-        in: query
-        type: integer
-        required: false
-        description: Numéro de la page (0 = période actuelle, -1 = période précédente, etc.)
-        example: 0
-
-    responses:
-      200:
-        description: Statistiques récupérées avec succès
-        schema:
-          type: object
-          properties:
-            periode:
-              type: string
-              example: "2025-S27"
-            total_commandes:
-              type: integer
-              example: 145
-            total_utilisateurs:
-              type: integer
-              example: 25
-            revenu_total:
-              type: number
-              format: float
-              example: 542500.0
-      400:
-        description: Requête invalide (paramètre incorrect)
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement de la requête
-    """
-    granularite = request.args.get("granularite", "semaine")
-    page = int(request.args.get("page", 0))
-    return get_stats_utilisation_globale(granularite, page)
-
-
-
+    return get_church_service(church_id)
+ 
 
 @staff_bp.route("/stats/utilisateurs-recents", methods=["GET"])
 @jwt_required()
@@ -365,229 +242,19 @@ def get_utilisateurs_recents_connectes():
     except Exception as e:
         return jsonify({"message": f"Erreur : {str(e)}"}), 500
 
-      
-@staff_bp.route("/stats/top-magasins", methods=["GET"])
-@jwt_required()
-@role_required("staff")
-def get_top_magasins():
-    """
-    Obtenir les meilleurs magasins selon le chiffre d’affaires
-    ---
-    tags:
-      - Statistiques
-    summary: Top magasins par chiffre d’affaires
-    description: >
-      Cette route retourne les 5 meilleurs magasins classés par chiffre d'affaires global.
-      Accessible uniquement aux membres du staff.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-
-    responses:
-      200:
-        description: Liste des meilleurs magasins
-        schema:
-          type: array
-          items:
-            type: object
-            properties:
-              magasin_id:
-                type: string
-                example: "60c72ef1532072e7c32ed48a"
-              nom:
-                type: string
-                example: "Magasin Central"
-              chiffre_affaire:
-                type: number
-                format: float
-                example: 129000.75
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement de la requête
-    """
-    try:
-        data = get_top_magasin_par_chiffre_affaire(limit=5)
-        return jsonify(data), 200
-    except Exception as e:
-        return jsonify({"message": f"Erreur : {str(e)}"}), 500
-
-
-
-# nombre de magasin totals
-@staff_bp.route("/magasins/total", methods=["GET"])
-@jwt_required()
-@role_required("admin", "manager", "staff")
-def route_nombre_magasins_total():
-    """
-    Récupérer le nombre total de magasins
-    ---
-    tags:
-      - Statistiques
-    summary: Nombre total de magasins enregistrés
-    description: Cette route retourne le nombre total de magasins dans le système.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-
-    responses:
-      200:
-        description: Nombre total de magasins récupéré avec succès
-        schema:
-          type: object
-          properties:
-            total_magasins:
-              type: integer
-              example: 42
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement
-    """
-    result = get_nombre_magasins_total()
-    return jsonify(result)
-
+    
   
-  
-# nombre d'admin ou de manager totals pour toute la plateforme
-@staff_bp.route("/admins-managers/total", methods=["GET"])
-@jwt_required()
-@role_required("admin", "manager", "staff")
-def route_nombre_admins_managers_total():
-    """
-    Récupérer le nombre total d'administrateurs et de managers
-    ---
-    tags:
-      - Statistiques
-    summary: Nombre total d'admins et de managers enregistrés
-    description: Cette route retourne le nombre total d'utilisateurs ayant le rôle "admin" ou "manager" dans le système.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-
-    responses:
-      200:
-        description: Nombre total d'admins et de managers récupéré avec succès
-        schema:
-          type: object
-          properties:
-            total_admins_managers:
-              type: integer
-              example: 17
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement
-    """
-    result = get_nombre_admins_managers_total()
-    return jsonify(result)
-
-  
-  
-@staff_bp.route("/livreurs/total", methods=["GET"])
-@jwt_required()
-@role_required("admin", "manager", "staff")
-def route_nombre_livreurs_total():
-    """
-    Récupérer le nombre total de livreurs
-    ---
-    tags:
-      - Statistiques
-    summary: Nombre total de livreurs enregistrés
-    description: Cette route retourne le nombre total de livreurs enregistrés sur toute la plateforme.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-
-    responses:
-      200:
-        description: Nombre total de livreurs récupéré avec succès
-        schema:
-          type: object
-          properties:
-            total_livreurs:
-              type: integer
-              example: 25
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement
-    """
-    result = get_nombre_livreurs_total()
-    return jsonify(result)
-
-  
-# nombre de client  totals pour toute la plateforme
-@staff_bp.route("/clients/total", methods=["GET"])
-@jwt_required()
-@role_required("admin", "manager", "staff")
-def route_nombre_clients_total():
-    """
-    Récupérer le nombre total de clients
-    ---
-    tags:
-      - Statistiques
-    summary: Nombre total de clients enregistrés
-    description: Cette route retourne le nombre total de clients enregistrés sur la plateforme.
-
-    parameters:
-      - name: Authorization
-        in: header
-        type: string
-        required: true
-        description: Jeton JWT de l'utilisateur (format **Bearer &lt;token&gt;**)
-        default: Bearer 
-
-    responses:
-      200:
-        description: Nombre total de clients récupéré avec succès
-        schema:
-          type: object
-          properties:
-            total_clients:
-              type: integer
-              example: 150
-      401:
-        description: Non autorisé – Token manquant ou invalide
-      500:
-        description: Erreur serveur lors du traitement
-    """
-    result = get_nombre_clients_total()
-    return jsonify(result)
-
-  
-  
-@staff_bp.route("/magasins/export", methods=["GET"])
+@staff_bp.route("/churchs/export", methods=["GET"])
 @jwt_required()
 @role_required("admin", "staff")
-def export_magasins_excel():
+def export_churchs_excel():
     """
-    Exporter la liste des magasins au format Excel
+    Exporter la liste des churchs au format Excel
     ---
     tags:
       - Export
-    summary: Export des magasins
-    description: Cette route permet d’exporter la liste complète des magasins enregistrés au format Excel (.xlsx). Le fichier est automatiquement généré et proposé au téléchargement.
+    summary: Export des churchs
+    description: Cette route permet d’exporter la liste complète des churchs enregistrés au format Excel (.xlsx). Le fichier est automatiquement généré et proposé au téléchargement.
 
     parameters:
       - name: Authorization
@@ -599,7 +266,7 @@ def export_magasins_excel():
 
     responses:
       200:
-        description: Fichier Excel contenant la liste des magasins généré avec succès
+        description: Fichier Excel contenant la liste des churchs généré avec succès
         schema:
           type: file
       401:
@@ -607,19 +274,19 @@ def export_magasins_excel():
       500:
         description: Erreur lors de l’exportation des données ou du traitement serveur
     """
-    result = get_all_magasin_service()
+    result = get_all_church_service()
 
     if result.get("status") != 200:
         return {"error": result.get("message", "Erreur inconnue")}, 500
 
-    magasins = result["magasins"]
+    churchs = result["churchs"]
 
     # Générer fichier Excel
-    buffer = export_magasins_to_excel(magasins)
+    buffer = export_churchs_to_excel(churchs)
 
     # Enregistrer temporairement
     now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"magasins_{now}.xlsx"
+    filename = f"churchs_{now}.xlsx"
     save_path = os.path.join(current_app.root_path, "exports")
     os.makedirs(save_path, exist_ok=True)
     full_path = os.path.join(save_path, filename)
@@ -710,113 +377,8 @@ def upload_image():
         return {"error": "Fichier manquant"}, 400
 
     return ajouter_image_service(data, file)
-
-
-
-@staff_bp.route("/images", methods=["GET"])
-# @role_required("staff")
-def get_all_images():
-    """
-    Liste toutes les images
-    ---
-    tags:
-      - Images Staff
-    summary: Liste toutes les images uploadées par le staff
-    description: Récupère toutes les images avec leurs URLs complètes
-    
-    responses:
-      200:
-        description: Liste des images récupérée avec succès
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            count:
-              type: integer
-              example: 15
-            images:
-              type: array
-              items:
-                type: object
-                properties:
-                  _id:
-                    type: string
-                    example: "60d5ec49f1b2c8a9e4f3b1a2"
-                  nom:
-                    type: string
-                    example: "Logo Entreprise"
-                  description:
-                    type: string
-                    example: "Logo principal"
-                  categorie:
-                    type: string
-                    example: "branding"
-                  filename:
-                    type: string
-                    example: "logo.png"
-                  url:
-                    type: string
-                    example: "http://localhost:5000/uploads/staff_images/logo.png"
-                  tags:
-                    type: array
-                    items:
-                      type: string
-                    example: ["logo", "officiel"]
-                  created_at:
-                    type: string
-                    format: date-time
-      401:
-        description: Non autorisé
-      500:
-        description: Erreur serveur
-    """
-    result = get_all_images_service()
-    return jsonify(result), result["status"]
-
-
-@staff_bp.route("/images/<image_id>", methods=["GET"])
-# @role_required("staff")
-def get_image_by_id(image_id):
-    """
-    Récupère une image par son ID
-    ---
-    tags:
-      - Images Staff
-    summary: Détails d'une image
-    description: Récupère les informations complètes d'une image spécifique
-    
-    parameters:
-      - name: image_id
-        in: path
-        type: string
-        required: true
-        description: ID de l'image
-        example: "60d5ec49f1b2c8a9e4f3b1a2"
-    
-    responses:
-      200:
-        description: Image trouvée
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-            image:
-              type: object
-      400:
-        description: ID invalide
-      404:
-        description: Image non trouvée
-      401:
-        description: Non autorisé
-      500:
-        description: Erreur serveur
-    """
-    result = get_image_by_id_service(image_id)
-    return jsonify(result), result["status"]
-
+ 
+ 
 
 @staff_bp.route("/images/by-category", methods=["GET"])
 # @role_required("staff")

@@ -1,8 +1,9 @@
 # utils/decorators.py
 
 from functools import wraps
-from flask_jwt_extended import verify_jwt_in_request, get_jwt
+from flask_jwt_extended import verify_jwt_in_request, get_jwt, get_jwt_identity
 from flask import jsonify
+ 
 
 def staff_required(fn):
     @wraps(fn)
@@ -63,3 +64,7 @@ def role_required(*roles):
             return fn(*args, **kwargs)
         return decorated_view
     return wrapper
+
+
+
+ 

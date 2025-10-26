@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils.decorators import admin_required, staff_required
+from utils.inject_church_id import inject_church_id
 from utils.inject_magasin_id import inject_magasin_id, inject_magasin_id_with_email
 from utils.decorators import role_required
 from models.user_model import UserModel
@@ -9,8 +10,8 @@ from services.user_service import (
     create_staff_account,
     create_admin_account,
     activate_user_by_email, 
-    create_livreur, create_manager,
-    get_livreur_service,
+  create_manager,
+ 
     delete_user_service,
     get_user_by_id_service,
     get_all_users_service,
@@ -267,68 +268,7 @@ def deactivate_user_with_id(id):
        
     return jsonify(result), result.get("status", 200)
 
-
-#Créer un livreur  
-@user_bp.route('/create_livreur', methods=['POST'])
-@jwt_required()
-@admin_required
-def create_livreur_route():
-    """
-    Créer un nouveau livreur pour un magasin.
-    ---
-    tags:
-      - Utilisateurs
-    parameters:
-      - in: body
-        name: body
-        required: true
-        description: Informations du livreur
-        schema:
-          type: object
-          required:
-            - name
-            - first_name
-            - email
-            - magasin_id
-          properties:
-            name:
-              type: string
-              example: "Doe"
-            first_name:
-              type: string
-              example: "John"
-            email:
-              type: string
-              example: "john.doe@email.com"
-            magasin_id:
-              type: string
-              example: "66325fd5379a7338c9cd51a1"
-    responses:
-      200:
-        description: Livreur créé avec succès
-      400:
-        description: Tous les champs sont requis
-    """
-    data = request.get_json()
-    data = inject_magasin_id(data)
-    name = data.get('name')
-    first_name = data.get('first_name')
-    email = data.get('email')
-    magasin_id = data.get('magasin_id')
-    password = data.get('password')
-    
-    if not name or not first_name or not email or not magasin_id:
-        return jsonify({"error": "Tous les champs sont requis"}), 400
-    if not password:
-        return jsonify({"error": "Le mot de passe est requis"}), 400
-    result = create_livreur(name, first_name, email, password,  magasin_id)
-    if isinstance(result, tuple):
-          data, status = result
-    else:
-        data, status = result, 200
-    
-    return jsonify(data), status
-
+ 
 # Créer un manager
 @user_bp.route('/create_manager', methods=['POST'])
 @jwt_required()
@@ -350,7 +290,7 @@ def create_manager_route():
             - name
             - first_name
             - email
-            - magasin_id
+            - church_id
           properties:
             name:
               type: string
@@ -361,7 +301,7 @@ def create_manager_route():
             email:
               type: string
               example: "anna.smith@email.com"
-            magasin_id:
+            church_id:
               type: string
               example: "66325fd5379a7338c9cd51a2"
     responses:
@@ -371,19 +311,19 @@ def create_manager_route():
         description: Tous les champs sont requis
     """
     data = request.get_json()
-    data = inject_magasin_id(data)
+    data = inject_church_id(data)
     name = data.get('name')
     first_name = data.get('first_name')
     email = data.get('email')
-    magasin_id = data.get('magasin_id')
+    church_id = data.get('church_id')
     password = data.get('password')
     if not password:
         return jsonify({"error": "Le mot de passe est requis"}), 400
     
-    if not name or not first_name or not email or not magasin_id:
+    if not name or not first_name or not email or not church_id:
         return jsonify({"error": "Tous les champs sont requis"}), 400
     
-    result = create_manager(name, first_name, email, password,  magasin_id)
+    result = create_manager(name, first_name, email, password,  church_id)
     if isinstance(result, tuple):
           data, status = result
     else:
@@ -444,7 +384,7 @@ def get_current_user():
 
 #Créer un livreur  
 @user_bp.route('/create_user', methods=['POST'])
-def create__simple_user_route():
+def create_simple_user_route():
     """
     Créer un nouveau livreur pour un magasin.
     ---
@@ -486,7 +426,7 @@ def create__simple_user_route():
     age_group = data.get('age_group')
     email = data.get('email')
     church_id = data.get('church_id')
-    password = data.get('password')
+    password = "66325fd5379a7338c9cd51a1"
     
     if not name or not age_group or not email or not church_id:
         return jsonify({"error": "Tous les champs sont requis"}), 400
@@ -566,14 +506,7 @@ def upload_avatar():
         return jsonify({"message": "Avatar mis à jour", "avatar_url": avatar_url}), 200
     
     return jsonify({"error": "Format de fichier non autorisé"}), 400
-
-
-# Récupérer tous les livreurs du magasin
-@user_bp.route('/livreurs', methods=['GET'])
-@role_required("admin","manager")
-def get_all_livreurs():
-    return get_livreur_service()
-    
+ 
     
 # Récupérer un utilisateur par son ID
 @user_bp.route('/<string:user_id>', methods=['GET'])

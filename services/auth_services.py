@@ -1,13 +1,14 @@
 # services/auth_services.py
 from datetime import datetime
 from flask import request, jsonify
+from models.church_model import ChurchModel
 from models.connexion_model import ConnexionModel
 from models.user_model import UserModel
 from bson import ObjectId
 from flask_bcrypt import Bcrypt
 from extensions import jwt
 from config import Config
-from models.magasin_model import MagasinModel
+ 
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask import jsonify, current_app
 from werkzeug.security import check_password_hash
@@ -68,13 +69,13 @@ def login_user(email, password):
     user = db.users.find_one({"email": email})
     if not user:
         return handle_error("Utilisateur non trouvé", 404)
-    # retrouver le magasin de l'utilisateur
-    if user['role'] == "admin" or user["role"] == "manager" or  user["role"] == "livreur":
-        magasin = MagasinModel.get_magasin_by_id(user["magasin_id"]) if user else None
-        if not magasin:
-            return handle_error("Magasin non trouvé pour cet utilisateur", 404)
-        if not magasin.get("is_active", False):
-            return handle_error("Magasin inactif. Veuillez contacter votre administrateur ou l'équipe de la plateforme", 403)
+    # retrouver le Church de l'utilisateur
+    if user['role'] == "admin" or user["role"] == "manager":
+        church = ChurchModel.get_church_by_id(user["church_id"]) if user else None
+        if not church:
+            return handle_error("Church non trouvé pour cet utilisateur", 404)
+        if not church.get("is_active", False):
+            return handle_error("Church inactif. Veuillez contacter votre administrateur ou l'équipe de la plateforme", 403)
     if not user:
         return handle_error("Utilisateur non trouvé", 404)
     
@@ -112,9 +113,9 @@ def login_user(email, password):
         "refresh_token": refresh_token,
         "role": user["role"],
         "email": user["email"],
-        "denomination_magasin": magasin["denomination"],
-        "magasin_id": str(magasin["_id"]),
-        "logo_magasin": f"{request.host_url}uploads/images/{magasin['logo']}" if magasin.get("logo") else None,
+        "denomination_church": church["denomination"],
+        "church_id": str(church["_id"]),
+        "logo_church": f"{request.host_url}uploads/images/{church['logo']}" if church.get("logo") else None,
 
         }
     else:

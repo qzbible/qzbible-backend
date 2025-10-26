@@ -1,17 +1,17 @@
-from models.livraison_model import LivraisonModel
-from models.stock_livreur_model import StockLivreurModel
-from models.produit_model import ProduitModel
+ 
 from models.user_model import UserModel
-from werkzeug.security import generate_password_hash
+ 
 from datetime import datetime
 from flask_bcrypt import Bcrypt
-from models.magasin_model import MagasinModel
+from models.church_model import ChurchModel
 from utils.email import send_validation_email, send_validation_email_creation_account
 from utils.jwt_token import generate_validation_token
 from flask import jsonify, current_app
 from utils.error_handler import handle_error
 from bson import ObjectId
 
+from flask_jwt_extended import get_jwt_identity
+ 
 bcrypt = Bcrypt()
 
 
@@ -41,7 +41,7 @@ def create_staff_account(name, first_name, email, password, confirm_password):
                     }), 201
 
 # Fonction pour la création d'un compte admin
-def create_admin_account(name, first_name, email, password, magasin_id):
+def create_admin_account(name, first_name, email, password, church_id):
     """
     Crée un compte admin désactivé, génère un token de validation, 
     et envoie un lien de validation par email.
@@ -50,7 +50,7 @@ def create_admin_account(name, first_name, email, password, magasin_id):
     if existing_user:
         return handle_error("Un compte avec cet email existe déjà.", 400)
 
-    user_id = UserModel.create_admin(name=name, first_name=first_name, email=email,password=password,  magasin_id=magasin_id)
+    user_id = UserModel.create_admin(name=name, first_name=first_name, email=email,password=password,  church_id=church_id)
     #token = generate_validation_token(user_id)
     credentials = {
         "name": name,
@@ -184,7 +184,7 @@ def check_role_limit(store_id, role):
     :return: True si la limite n'est pas atteinte, False si elle est atteinte.
     """
     # Récupérer les informations du magasin
-    magasin = MagasinModel.get_magasin_by_id(store_id)
+    magasin = ChurchModel.get_church_by_id(store_id)
     if not magasin:
         raise ValueError("Magasin non trouvé.")
     
@@ -193,54 +193,11 @@ def check_role_limit(store_id, role):
         current_managers_count = UserModel.count_users_by_role(store_id, "manager")
         if current_managers_count >= magasin["licence"]["max_managers"]:
             return False  # Limite atteinte pour les managers
-    elif role == "livreur":
-        current_livreurs_count = UserModel.count_users_by_role(store_id, "livreur")
-        if current_livreurs_count >= magasin["licence"]["max_livreurs"]:
-            return False  # Limite atteinte pour les livreurs
+    
     
     return True  # La limite n'est pas atteinte
 
-
-# Créer un compte livreur
-def create_livreur(name, first_name, email, password, magasin_id):
-    """
-    Crée un compte livreur avec les informations fournies.
-    
-    :param name: Nom du livreur
-    :param first_name: Prénom du livreur
-    :param email: Email du livreur
-    :param password: Mot de passe du livreur
-    :return: Dictionnaire contenant le message et l'ID du livreur créé
-    """
-    
-    """
-    verifie si la limite n'est pas atteinte.
-    """
-    if not check_role_limit(magasin_id, "livreur"):
-        return {"error": "Limite de livreurs atteinte pour ce magasin."}, 400
-    try:
-        existing_user = UserModel.find_by_email(email)
-        if existing_user:
-            return {"message": "Un compte avec cet email existe déjà.", "status": 400}
-
-        user_id = UserModel.create_livreur(name=name, first_name=first_name, email=email,password=password, magasin_id=magasin_id)
-        token = generate_validation_token(user_id)
-        #send_validation_email(email, token)
-        credentials = {
-            "name": name,
-            "first_name": first_name,
-            "email": email,
-            "role": "livreur",
-            "password": password
-        }
-        send_validation_email_creation_account(email, credentials)
-
-        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201}
-    
-    except Exception as e:
-        return {"message": f"Erreur lors de la création du compte livreur : {str(e)}", "status": 500}
-  
-  
+ 
 
 # Créer un compte livreur
 def create_simple_user(name, age_group, email, password, church_id):
@@ -282,7 +239,7 @@ def create_simple_user(name, age_group, email, password, church_id):
   
   
 # créer un compte manager  
-def create_manager(name, first_name, email,password, magasin_id):
+def create_manager(name, first_name, email,password, church_id):
     """
     Crée un compte manager avec les informations fournies.
     
@@ -296,14 +253,14 @@ def create_manager(name, first_name, email,password, magasin_id):
     """
     Verification de la non atteinte de la limite de creation des manager conformément à la licence
     """
-    if not check_role_limit(magasin_id, "manager"):
+    if not check_role_limit(church_id, "manager"):
         return {"error": "Limite de managers atteinte pour ce magasin."}, 400
     try:
         existing_user = UserModel.find_by_email(email)
         if existing_user:
             return {"message": "Un compte avec cet email existe déjà.", "status": 400}
 
-        user_id = UserModel.create_manager(name=name, first_name=first_name, email=email, password=password, magasin_id=magasin_id)
+        user_id = UserModel.create_manager(name=name, first_name=first_name, email=email, password=password, church_id=church_id)
         
         token = generate_validation_token(user_id)
         #send_validation_email(email, token)
@@ -321,23 +278,7 @@ def create_manager(name, first_name, email,password, magasin_id):
     except Exception as e:
         return {"message": f"Erreur lors de la création du compte manager : {str(e)}", "status": 500}
     
-    
-# Fonction pour récupérer la liste des livreurs
-def get_livreur_service():
-    """
-    Récupère la liste des livreurs.
-    
-    :return: Dictionnaire contenant la liste des livreurs
-    """
-    try:
-        livreurs = UserModel.get_livreurs()
-        # classer par ordre de création
-        livreurs.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
-        return {"livreurs": livreurs, "status": 200}
-    
-    except Exception as e:
-        return {"message": f"Erreur lors de la récupération des livreurs : {str(e)}", "status": 500}
-    
+   
 
 # Fonction pour supprimer un utilisateur par son ID
 def delete_user_service(user_id):
@@ -358,29 +299,6 @@ def delete_user_service(user_id):
         if not user:
             return {"message": "Utilisateur non trouvé.", "status": 404}
 
-        # Cas spécifique : si c'est un livreur
-        if user['role'] == 'livreur':
-            # Vérification des livraisons non terminées
-            nb_livraisons = LivraisonModel.collection.count_documents({
-                "livreur_id": user_id,
-                "statut_livraison": {"$ne": "livrée"}
-            })
-
-            if nb_livraisons > 0:
-                return {
-                    "message": "Impossible de supprimer ce livreur. Certaines livraisons ne sont pas encore terminées.",
-                    "status": 400
-                }
-
-            # Réintégration du stock dans le stock du magasin
-            stock_livreur = StockLivreurModel.get_all_stock_livreur(user_id)
-            for item in stock_livreur:
-                produit = ProduitModel.get_by_id(item["produit_id"])
-                if produit:
-                    ProduitModel.collection.update_one(
-                        {"_id": item["produit_id"]},
-                        {"$inc": {"quantite": item["quantite"]}}
-                    )
 
         # Suppression de l'utilisateur
         result = UserModel.delete_user(user_id)
@@ -413,8 +331,7 @@ def update_user_service(user_id, data):
     except Exception as e:
         return {"message": f"Erreur lors de la mise à jour de l'utilisateur : {str(e)}", "status": 500}
     
-from flask_jwt_extended import get_jwt_identity
-from bson import ObjectId
+
 
 def get_all_users_service():
     """
@@ -433,11 +350,11 @@ def get_all_users_service():
         if user["role"] == "staff":
             users = UserModel.get_all_users()
         else:
-            magasin_id = user.get("magasin_id")
-            if not magasin_id:
-                return {"message": "Magasin introuvable pour cet utilisateur", "status": 400}
+            church_id = user.get("church_id")
+            if not church_id:
+                return {"message": "Church introuvable pour cet utilisateur", "status": 400}
 
-            users = list(UserModel.collection.find({"magasin_id": magasin_id}))
+            users = list(UserModel.collection.find({"church_id": church_id}))
             
 
         # Conversion des ObjectId et uniformisation des clés
@@ -452,8 +369,8 @@ def get_all_users_service():
             if "password" in u:
                 del u["password"]
             # Convertir magasin_id en string si c’est un ObjectId
-            if "magasin_id" in u and isinstance(u["magasin_id"], ObjectId):
-                u["magasin_id"] = str(u["magasin_id"])
+            if "church_id" in u and isinstance(u["church_id"], ObjectId):
+                u["church_id"] = str(u["church_id"])
             if user["role"] == "manager":
                 users = [u for u in users if u.get("role") != "admin"]
 

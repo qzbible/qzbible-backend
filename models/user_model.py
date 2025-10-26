@@ -32,12 +32,12 @@ class UserModel:
         return str(result.inserted_id)
     
     @staticmethod
-    def create_admin(name, first_name, email, password, magasin_id, role="admin"):
+    def create_admin(name, first_name, email, password, church_id, role="admin"):
         user = {
             "name" : name,
             "first_name": first_name,
-            "email": email.lower(),
-            "magasin_id": ObjectId(magasin_id),
+            "email": email.lower(), 
+            "church_id": ObjectId(church_id),
             "role": role,
             "password": bcrypt.generate_password_hash(password),
             "is_active": True,
@@ -49,34 +49,21 @@ class UserModel:
     
     
     @staticmethod
-    def create_manager(name, first_name, email, password, magasin_id):
+    def create_manager(name, first_name, email, password, church_id):
         user = {
             "name" : name,
             "first_name": first_name,
             "email": email.lower(),
             "role": "manager",
             "password": bcrypt.generate_password_hash(password),
-            "magasin_id": ObjectId(magasin_id),
+            "church_id": ObjectId(church_id),
             "is_active": True,
             "created_at": datetime.utcnow()
             }
         result = UserModel.get_collection().insert_one(user)
         return str(result.inserted_id)
     
-    @staticmethod
-    def create_livreur(name, first_name, email, password, magasin_id):
-        user = {
-            "name" : name,
-            "first_name": first_name,
-            "email": email.lower(),
-            "role": "livreur",
-            "password": bcrypt.generate_password_hash(password),
-            "magasin_id": ObjectId(magasin_id),
-            "is_active": True,
-            "created_at": datetime.utcnow()
-        }
-        result = UserModel.get_collection().insert_one(user)
-        return str(result.inserted_id)
+    
     
     @staticmethod
     def create_simple_user(name, age_group, email, password, church_id):
@@ -121,18 +108,18 @@ class UserModel:
 
     
     @staticmethod
-    def count_users_by_role(magasin_id, role):
+    def count_users_by_role(church_id, role):
         """
         Compte le nombre d'utilisateurs par rôle dans un magasin donné.
-        :param magasin_id: ID du magasin
+        :param church_id: ID du church
         :param role: Rôle de l'utilisateur (manager, livreur)
         :return: Nombre d'utilisateurs avec le rôle spécifié
         """
-        if role not in ["manager", "livreur"]:
+        if role not in ["manager"]:
             raise ValueError("Rôle inconnu. Utilisez 'manager' ou 'livreur'.")
-        if not ObjectId.is_valid(magasin_id):
-            raise ValueError("ID de magasin invalide.")
-        return UserModel.get_collection().count_documents({"magasin_id": ObjectId(magasin_id), "role": role})
+        if not ObjectId.is_valid(church_id):
+            raise ValueError("ID de church invalide.")
+        return UserModel.get_collection().count_documents({"church_id": ObjectId(church_id), "role": role})
     
     #Mettre à jour le champs avatar ou ajouter un avatar
     @staticmethod
@@ -169,26 +156,7 @@ class UserModel:
             {"$set": {"password": hashed_password}}
         )
         return result.modified_count > 0
-    
-    @staticmethod
-    def get_livreurs(magasin_id=None):
-        """
-        Récupère tous les livreurs.
-        :return: Liste de dictionnaires contenant les informations des livreurs
-        """
-        if magasin_id is None:
-            try:
-                # Import local ici pour éviter le circular import
-                from utils.inject_magasin_id import inject_magasin_id
-                data = inject_magasin_id({})
-                magasin_id = data["magasin_id"]
-            except Exception as e:
-                return {"error": str(e)}, 401
-        print("ID du magasin :", magasin_id)
-        livreurs = UserModel.get_collection().find(
-            {"role": "livreur", "magasin_id": ObjectId(magasin_id)}
-        )
-        return [{"id": str(livreur["_id"]), "name": livreur["name"], "first_name": livreur["first_name"]} for livreur in livreurs]
+   
     
     @staticmethod
     def delete_user(user_id):

@@ -1,4 +1,4 @@
-# schemas/magasin_schema.py
+# schemas/church_schema.py
 
 from marshmallow import Schema, fields, validate
 
@@ -8,7 +8,7 @@ class LicenceSchema(Schema):
     max_livreurs = fields.Int(required=True, validate=validate.Range(min=1))
 
 
-class CreateMagasinSchema(Schema):
+class CreateChurchSchema(Schema):
     denomination = fields.String(required=True, validate=validate.Length(min=3))
     pays = fields.String(required=True)
     logo = fields.String(required=False)
@@ -22,7 +22,7 @@ class CreateMagasinSchema(Schema):
     admin = fields.Dict(required=True, keys=fields.String(), values=fields.String())
     #licence = fields.Nested(LicenceSchema, required=True)
 
-class MagasinUpdateSchema(Schema):
+class ChurchUpdateSchema(Schema):
     denomination = fields.String(required=False)
     pays = fields.String(required=False)
     ville = fields.String(required=False)

@@ -1,5 +1,5 @@
-from .magasin import magasin_bp 
+from .church_routes import church_bp 
 
 
 def register_routes(app):
-    app.register_blueprint(magasin_bp)
+    app.register_blueprint(church_bp)

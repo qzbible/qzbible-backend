@@ -37,35 +37,24 @@ def create_app():
     Config.init_app(app)
     
     # Enregistrement des Blueprints
-    from routes.magasin import magasin_bp
+    from routes.church_routes import church_bp
     from routes.auth import auth_bp
     from routes.user_routes import user_bp
     from routes.staff_routes import staff_bp
-    from routes.categorie_routes import categorie_bp
-    from routes.produit_routes import produit_bp
-    from routes.client_route import client_bp
-    from routes.commande_routes import commande_bp
-    from routes.approvisionnement_routes import approvisionnement_bp
-    from routes.livraison_routes import livraison_bp
+    from routes.sections_routes import sections_bp
     from routes.dashboard_routes import dashboard_bp
-    from routes.notification_routes import notification_bp
+   
 
     from routes.otp_routes import otp_bp
     
     app.register_blueprint(user_bp)
-    app.register_blueprint(magasin_bp)
+ 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(staff_bp, url_prefix='/staff')
-    app.register_blueprint(categorie_bp)   
-    app.register_blueprint(produit_bp)
-    app.register_blueprint(client_bp)
-    #app.register_blueprint(commande_bp)
-    app.register_blueprint(approvisionnement_bp)
-    app.register_blueprint(livraison_bp)
     app.register_blueprint(dashboard_bp)
-    app.register_blueprint(notification_bp)
-
     app.register_blueprint(otp_bp)
+    app.register_blueprint(church_bp)
+    app.register_blueprint(sections_bp)
     
     # CORS : autoriser le front React à communiquer avec le backend
     CORS(app, supports_credentials=True, origins=[Config.ALLOWED_ORIGINS])
@@ -119,8 +108,8 @@ def create_app():
     swagger = Swagger(app, template={
         "swagger": "2.0",
         "info": {
-            "title": "QZBible API",
-            "description": "API de gestion de livraison avec rôles, JWT, création de magasin, etc.",
+            "title": "Quiz Bible API",
+            "description": "API de croissance spirituelle ",
             "version": "1.0.0"
         },
         "host": os.getenv("BASE_URL", "localhost:5000"),  # Votre domaine
