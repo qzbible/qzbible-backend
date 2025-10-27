@@ -380,8 +380,6 @@ def get_current_user():
     user['_id'] = str(user['_id'])
     return jsonify(user), 200
 
-
-
 #Créer un livreur  
 @user_bp.route('/create_user', methods=['POST'])
 def create_simple_user_route():
@@ -554,6 +552,7 @@ def delete_user(user_id):
       404:
         description: Utilisateur non trouvé
     """
+    print(f"Suppression de l'utilisateur avec ID : {user_id}")
     return delete_user_service(user_id)
   
   
