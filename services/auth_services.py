@@ -132,23 +132,7 @@ def login_user(email, password):
 
 # Fonction de connexion de l'utilisateur
 def login_user_simple(email):
-    user = db.users.find_one({"email": email})
-    if not user:
-        return handle_error("Utilisateur non trouvé", 404)
-    # retrouver le Church de l'utilisateur
-    if user['role'] == "simple_user":
-        church = ChurchModel.get_church_by_id(user["church_id"]) if user else None
-        if not church:
-            return handle_error("Church non trouvé pour cet utilisateur", 404)
-        if not church.get("is_active", False):
-            return handle_error("Church inactif. Veuillez contacter votre administrateur ou l'équipe de la plateforme", 403)
-    if not user:
-        return handle_error("Utilisateur non trouvé", 404)
-    
-    if not user.get("is_active", False):
-        return handle_error("Compte inactif. Veuillez vérifier votre email ou contactez votre administrateur", 403)
-    
-     
+    user = db.users.find_one({"email": email}) 
 
     access_token = create_access_token(
         identity=str(user["_id"]), 
@@ -177,7 +161,7 @@ def login_user_simple(email):
         "email": user["email"],
     }
     
-    return jsonify(data), 200
+    return jsonify(data)
 
 
 
