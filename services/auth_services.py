@@ -101,7 +101,7 @@ def login_user(email, password):
         "user_id": user["_id"],
         "email": user["email"],
         "role": user["role"],
-        "magasin_id": user.get("magasin_id"),
+        "church_id": user.get("church_id"),
         "timestamp": datetime.utcnow(),
         "ip_address": request.remote_addr
     })
@@ -132,16 +132,16 @@ def login_user(email, password):
 
 # Fonction de connexion de l'utilisateur
 def login_user_simple(email):
-    user = db.users.find_one({"email": email}) 
+    user = UserModel.find_by_email(email) 
 
     access_token = create_access_token(
         identity=str(user["_id"]), 
         additional_claims={"role": user["role"]}, 
-        expires_delta=timedelta(days=365*10) 
+        expires_delta=timedelta(days=365*10)  # long expiration for simple login 10 years
     )
     refresh_token = create_refresh_token(
         identity=str(user["_id"]), 
-        expires_delta=timedelta(days=365*10)
+        expires_delta=timedelta(days=365*10) # long expiration for simple login 10 years
     )
     
     # Enregistrer la connexion
@@ -149,7 +149,7 @@ def login_user_simple(email):
         "user_id": user["_id"],
         "email": user["email"],
         "role": user["role"],
-        "magasin_id": user.get("magasin_id"),
+        "church_id": user.get("church_id"),
         "timestamp": datetime.utcnow(),
         "ip_address": request.remote_addr
     }) 

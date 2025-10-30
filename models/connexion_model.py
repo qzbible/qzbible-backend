@@ -14,7 +14,7 @@ class ConnexionModel:
         - user_id (ObjectId ou str)
         - email (str)
         - role (str)
-        - magasin_id (ObjectId ou str ou None)
+        - church_id (ObjectId ou str ou None)
         - timestamp (datetime)
         - ip_address (str)
 
@@ -27,12 +27,12 @@ class ConnexionModel:
             except Exception:
                 pass  # si conversion impossible, on laisse tel quel (ou raise)
 
-        if "magasin_id" in data and data["magasin_id"]:
-            if not isinstance(data["magasin_id"], ObjectId):
+        if "church_id" in data and data["church_id"]:
+            if not isinstance(data["church_id"], ObjectId):
                 try:
-                    data["magasin_id"] = ObjectId(data["magasin_id"])
+                    data["church_id"] = ObjectId(data["church_id"])
                 except Exception:
-                    data["magasin_id"] = None
+                    data["church_id"] = None
 
         # Vérifier la présence d'un timestamp, sinon mettre maintenant
         if "timestamp" not in data:
