@@ -9,6 +9,18 @@ from models.user_model import UserModel
 def start_quiz_attempt_service(quiz_id, user_id, church_id):
     """
     Démarre une nouvelle tentative de quiz.
+
+    1. L'utilisateur (identifié par le JWT) veut passer un quiz
+    2. Le système vérifie :
+    ✅ Le quiz existe
+    ✅ L'utilisateur a accès au chapitre contenant ce quiz
+    ✅ L'utilisateur n'a pas dépassé le nombre max de tentatives
+    ✅ Aucune tentative n'est déjà en cours pour ce quiz
+    3. SI tout est OK :
+    → Création d'une tentative (status: "in_progress")
+    → Retour du quiz SANS les réponses correctes
+    → Démarrage du timer (si limite de temps configurée)
+    4. L'utilisateur peut maintenant répondre aux questions
     """
     # Récupérer le quiz
     quiz = QuizModel.get_quiz_by_id(quiz_id)

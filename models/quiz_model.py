@@ -58,28 +58,71 @@ class QuizModel:
             "quiz_id": str(result.inserted_id)
         }
     
+    # @staticmethod
+    # def get_quiz_by_id(quiz_id):
+    #     """
+    #     Récupère un quiz par son ID avec toutes ses questions.
+    #     """
+    #     quiz = QuizModel.get_collection().find_one({"_id": ObjectId(quiz_id)})
+    #     if quiz:
+    #         quiz["_id"] = str(quiz["_id"])
+    #         quiz["chapter_id"] = str(quiz["chapter_id"])
+    #         quiz["church_id"] = str(quiz["church_id"])
+            
+    #         if quiz.get("created_by"):
+    #             quiz["created_by"] = str(quiz["created_by"])
+    #         if quiz.get("source_quiz_id"):
+    #             quiz["source_quiz_id"] = str(quiz["source_quiz_id"])
+            
+    #         # Convertir les ObjectId des questions et options
+    #         for question in quiz.get("questions", []):
+    #             question["_id"] = str(question["_id"])
+    #             if "options" in question:
+    #                 for option in question["options"]:
+    #                     option["_id"] = str(option["_id"])
+        
+    #     return quiz
+    
     @staticmethod
-    def get_quiz_by_id(quiz_id):
+    def get_quiz_by_id(quiz_id, include_answers=True):
         """
-        Récupère un quiz par son ID avec toutes ses questions.
+        Récupère un quiz par son ID.
+        
+        :param quiz_id: ID du quiz
+        :param include_answers: Si False, masque les réponses correctes (pour les apprenants)
+        :return: dict ou None
+
+       
         """
         quiz = QuizModel.get_collection().find_one({"_id": ObjectId(quiz_id)})
+        
         if quiz:
             quiz["_id"] = str(quiz["_id"])
             quiz["chapter_id"] = str(quiz["chapter_id"])
-            quiz["church_id"] = str(quiz["church_id"])
             
-            if quiz.get("created_by"):
-                quiz["created_by"] = str(quiz["created_by"])
-            if quiz.get("source_quiz_id"):
-                quiz["source_quiz_id"] = str(quiz["source_quiz_id"])
-            
-            # Convertir les ObjectId des questions et options
-            for question in quiz.get("questions", []):
-                question["_id"] = str(question["_id"])
-                if "options" in question:
-                    for option in question["options"]:
-                        option["_id"] = str(option["_id"])
+            # Masquer les réponses correctes si demandé (pour les apprenants)
+            if not include_answers and quiz.get("questions"):
+                for question in quiz["questions"]:
+                    question["_id"] = str(question["_id"])
+                    
+                    # Retirer les informations de correction selon le type
+                    if question["type"] in ["mcq_single", "mcq_multiple"]:
+                        # Garder les options mais retirer is_correct
+                        for option in question.get("options", []):
+                            option.pop("is_correct", None)
+                    
+                    elif question["type"] == "true_false":
+                        question.pop("correct_answer", None)
+                    
+                    elif question["type"] == "fill_blank":
+                        question.pop("correct_answers", None)
+                    
+                    elif question["type"] == "free_text":
+                        question.pop("expected_keywords", None)
+            else:
+                # Convertir les ObjectId dans les questions
+                for question in quiz.get("questions", []):
+                    question["_id"] = str(question["_id"])
         
         return quiz
     
