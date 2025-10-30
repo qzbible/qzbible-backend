@@ -194,8 +194,8 @@ def update_church(church_id):
   
   
   #récupérer un church
-@church_bp.route('/', methods=['GET'])
 
+@church_bp.route('/', methods=['GET'])
 @role_required("admin", "staff", "manager", "livreur")
 @jwt_required()
 def get_info_church():
@@ -229,6 +229,7 @@ def get_info_church():
       
       
   #récupérer un church par son id
+
 @church_bp.route('/<string:church_id>', methods=['GET'])
 @role_required("admin", "staff", "manager", "livreur")
 @jwt_required()
@@ -257,8 +258,6 @@ def get_info_church_details(church_id):
         return jsonify(church), 200
     else:
         return jsonify({"message": "church non trouvé"}), 404
-
-
 
 # Supprimer un church
 @church_bp.route('/delete/<string:church_id>', methods=['DELETE'])
@@ -303,7 +302,6 @@ def delete_church(church_id):
     else:
         return jsonify({"message": result["message"]}), result["status"]
       
-
 # Récupérer tous les churchs
 @church_bp.route('/all', methods=['GET'])
 # @jwt_required()

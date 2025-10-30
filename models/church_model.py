@@ -51,7 +51,6 @@ class ChurchModel:
             password=admin_data["password"],
             church_id=church_id,
             role="admin",
-                
         )
         token = generate_validation_token(admin_id)
         # Envoi de l'email de changement de mot de passe à l'administrateur du church
@@ -158,24 +157,17 @@ class ChurchModel:
             UserModel.collection.delete_one({"_id": user["_id"]})
         
         
-        from models.categorie_model import CategorieModel
-        categories = CategorieModel.collection.find({"church_id": ObjectId(church_id)})
-        # supprimer toutes les catégories du church
-        for categorie in categories:
-            CategorieModel.collection.delete_one({"_id": categorie["_id"]})
-            
-       
-            
-    
+        # from models.categorie_model import CategorieModel
+        # categories = CategorieModel.collection.find({"church_id": ObjectId(church_id)})
+        # # supprimer toutes les catégories du church
+        # for categorie in categories:
+        #     CategorieModel.collection.delete_one({"_id": categorie["_id"]})
+   
         if result.deleted_count > 0:
             return {"message": "church supprimé avec succès."}
         else:
             return {"message": "church non trouvé."}
-        
-    
-    
-    
-    
+
      #Retourne tous les churchs de la base de données avec les utilisateurs associés.
     
     @staticmethod

@@ -218,7 +218,7 @@ def create_simple_user(name, age_group, email, password, church_id):
     try:
         existing_user = UserModel.find_by_email(email)
         if existing_user:
-            return {"message": "Un compte avec cet email existe déjà.", "status": 400}
+            return {"message": "Un compte avec cet email existe déjà.", "status": 409}
 
         user_id = UserModel.create_simple_user(name=name, age_group=age_group, email=email, password=password, church_id=church_id)
          

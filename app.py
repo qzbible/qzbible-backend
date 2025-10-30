@@ -43,6 +43,13 @@ def create_app():
     from routes.staff_routes import staff_bp
     from routes.sections_routes import sections_bp
     from routes.dashboard_routes import dashboard_bp
+
+    from routes.chapters_routes import chapters_bp
+    from routes.quizzes_routes import quizzes_bp
+    from routes.quiz_attempts import quiz_attempts_bp
+    from routes.catalog_routes import catalog_bp
+    from routes.manual_unlocks_routes import manual_unlocks_bp
+    from routes.user_progress_routes import user_progress_bp
    
 
     from routes.otp_routes import otp_bp
@@ -55,6 +62,12 @@ def create_app():
     app.register_blueprint(otp_bp)
     app.register_blueprint(church_bp)
     app.register_blueprint(sections_bp)
+    app.register_blueprint(chapters_bp)
+    app.register_blueprint(quizzes_bp)
+    app.register_blueprint(quiz_attempts_bp)
+    app.register_blueprint(catalog_bp)
+    app.register_blueprint(manual_unlocks_bp)
+    app.register_blueprint(user_progress_bp)
     
     # CORS : autoriser le front React à communiquer avec le backend
     CORS(app, supports_credentials=True, origins=[Config.ALLOWED_ORIGINS])
