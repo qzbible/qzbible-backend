@@ -154,14 +154,9 @@ def login_user_simple(email):
         "ip_address": request.remote_addr
     }) 
         # Si l'utilisateur est un staff, il n'est liée a aucun magasin
-    data = {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "role": user["role"],
-        "email": user["email"],
-    }
+     
     
-    return jsonify(data)
+    return access_token, refresh_token
 
 
 

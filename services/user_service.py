@@ -231,8 +231,8 @@ def create_simple_user(name, age_group, email, password, church_id):
             "password": password
         }
         send_validation_email_creation_account(email, credentials)
-
-        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201, "access": login_user_simple(email)}
+        access, refresh = login_user_simple(email)
+        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201, "access":access, "refresh":refresh}
     
     except Exception as e:
         return {"message": f"Erreur lors de la création du compte livreur : {str(e)}", "status": 500}

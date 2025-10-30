@@ -78,11 +78,13 @@ def send_otp():
         email = data['email']
         existing_user = UserModel.find_by_email(email)
         if existing_user:
+            access, refresh = login_user_simple(email)
             return jsonify({
                 "success": True,
                 "message": "Un utilisateur avec cet email existe déjà.",
                 'user':existing_user,
-                'access': login_user_simple(email)
+                'access': access,
+                'refresh': refresh,
             }), 409
         # Créer l'OTP
         otp_code = OTPModel.create_otp(email, expiration_minutes=10)
