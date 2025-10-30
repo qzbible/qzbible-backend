@@ -4,6 +4,7 @@ from models.user_model import UserModel
 from datetime import datetime
 from flask_bcrypt import Bcrypt
 from models.church_model import ChurchModel
+from services.auth_services import login_user_simple
 from utils.email import send_validation_email, send_validation_email_creation_account
 from utils.jwt_token import generate_validation_token
 from flask import jsonify, current_app
@@ -231,7 +232,7 @@ def create_simple_user(name, age_group, email, password, church_id):
         }
         send_validation_email_creation_account(email, credentials)
 
-        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201}
+        return {"message": "Compte livreur créé avec succès.", "user_id": str(user_id), "status": 201, "access": login_user_simple(email)}
     
     except Exception as e:
         return {"message": f"Erreur lors de la création du compte livreur : {str(e)}", "status": 500}

@@ -5,6 +5,7 @@ from marshmallow import ValidationError
 from models.user_model import UserModel
 from schemas.otp_schemas import SendOTPSchema, VerifyOTPSchema, ResendOTPSchema
 from models.otp_model import OTPModel
+from services.auth_services import login_user_simple
 from utils.email import send_otp_mail
  
 
@@ -80,7 +81,8 @@ def send_otp():
             return jsonify({
                 "success": True,
                 "message": "Un utilisateur avec cet email existe déjà.",
-                'user':existing_user
+                'user':existing_user,
+                'access': login_user_simple(email)
             }), 409
         # Créer l'OTP
         otp_code = OTPModel.create_otp(email, expiration_minutes=10)

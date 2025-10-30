@@ -130,6 +130,55 @@ def login_user(email, password):
     return jsonify(data), 200
 
 
+# Fonction de connexion de l'utilisateur
+def login_user_simple(email):
+    user = db.users.find_one({"email": email})
+    if not user:
+        return handle_error("Utilisateur non trouvé", 404)
+    # retrouver le Church de l'utilisateur
+    if user['role'] == "simple_user":
+        church = ChurchModel.get_church_by_id(user["church_id"]) if user else None
+        if not church:
+            return handle_error("Church non trouvé pour cet utilisateur", 404)
+        if not church.get("is_active", False):
+            return handle_error("Church inactif. Veuillez contacter votre administrateur ou l'équipe de la plateforme", 403)
+    if not user:
+        return handle_error("Utilisateur non trouvé", 404)
+    
+    if not user.get("is_active", False):
+        return handle_error("Compte inactif. Veuillez vérifier votre email ou contactez votre administrateur", 403)
+    
+     
+
+    access_token = create_access_token(
+        identity=str(user["_id"]), 
+        additional_claims={"role": user["role"]}, 
+        expires_delta=timedelta(days=60) 
+    )
+    refresh_token = create_refresh_token(
+        identity=str(user["_id"]), 
+        expires_delta=timedelta(days=7)
+    )
+    
+    # Enregistrer la connexion
+    ConnexionModel.create_connexion({
+        "user_id": user["_id"],
+        "email": user["email"],
+        "role": user["role"],
+        "magasin_id": user.get("magasin_id"),
+        "timestamp": datetime.utcnow(),
+        "ip_address": request.remote_addr
+    }) 
+        # Si l'utilisateur est un staff, il n'est liée a aucun magasin
+    data = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "role": user["role"],
+        "email": user["email"],
+    }
+    
+    return jsonify(data), 200
+
 
 
 
