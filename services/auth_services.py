@@ -137,11 +137,11 @@ def login_user_simple(email):
     access_token = create_access_token(
         identity=str(user["_id"]), 
         additional_claims={"role": user["role"]}, 
-        expires_delta=timedelta(days=60) 
+        expires_delta=timedelta(days=365*10) 
     )
     refresh_token = create_refresh_token(
         identity=str(user["_id"]), 
-        expires_delta=timedelta(days=7)
+        expires_delta=timedelta(days=365*10)
     )
     
     # Enregistrer la connexion
