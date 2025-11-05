@@ -5,6 +5,7 @@ from datetime import datetime
 from models.quiz_attempt_model import QuizAttemptModel
 from models.quiz_model import QuizModel
 from models.user_model import UserModel
+from services.user_progress_service import update_user_progress_after_quiz
 
 def start_quiz_attempt_service(quiz_id, user_id, church_id):
     """
@@ -61,7 +62,6 @@ def start_quiz_attempt_service(quiz_id, user_id, church_id):
     result["quiz"] = quiz_info
     
     return result, 201
-
 
 def submit_quiz_attempt_service(attempt_id, answers_data, user_id):
     """
@@ -146,6 +146,16 @@ def submit_quiz_attempt_service(attempt_id, answers_data, user_id):
         "score": round(score_percentage, 2),
         "passed": passed
     })
+    
+    # 🎯 AJOUT ICI : Mettre à jour la progression utilisateur
+    update_user_progress_after_quiz(
+        user_id=user_id,
+        quiz_id=str(attempt["quiz_id"]),
+        chapter_id=str(quiz["chapter_id"]),
+        church_id=str(attempt["church_id"]),
+        score_percentage=round(score_percentage, 2),
+        passed=passed
+    )
     
     # Récupérer la tentative mise à jour
     updated_attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)

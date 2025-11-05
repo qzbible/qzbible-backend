@@ -6,6 +6,8 @@ from models.section_model import SectionModel
 from models.chapter_model import ChapterModel
 from models.quiz_model import QuizModel
 from models.user_model import UserModel
+from datetime import datetime 
+
 
 def get_user_progress_service(user_id, church_id):
     """
@@ -561,3 +563,246 @@ def get_recommended_next_action_service(user_id, church_id):
         "message": "Félicitations ! Vous avez terminé toutes les sections disponibles 🎉",
         "overall_stats": progress.get("overall_stats")
     }, 200
+
+
+# services/user_progress_service.py
+
+def update_user_progress_after_quiz(user_id, quiz_id, chapter_id, church_id, score_percentage, passed):
+    """
+    Met à jour la progression de l'utilisateur après un quiz.
+    """
+    
+    # 1. Récupérer ou créer la progression
+    progress = UserProgressModel.get_or_create_progress(user_id, church_id)
+    
+     
+    # 2. Récupérer le chapitre pour connaître sa section
+    chapter = ChapterModel.get_chapter_by_id(chapter_id)
+    if not chapter:
+        return
+    
+    section_id = str(chapter["section_id"])
+    
+    # 3. Trouver ou créer la section dans la progression
+    section_progress = None
+    section_index = None
+    
+    for idx, sp in enumerate(progress.get("sections_progress", [])):
+        if str(sp["section_id"]) == section_id:
+            section_progress = sp
+            section_index = idx
+            break
+    
+    # 🎯 SI la section n'existe pas, la créer
+    if not section_progress:
+        section = SectionModel.get_section_by_id(section_id)
+        if not section:
+            return  # Section non trouvée
+        
+        # Créer la progression de la section
+        section_progress = {
+            "section_id": section_id,
+            "status": "in_progress",
+            "completion_percentage": 0,
+            "started_at": datetime.utcnow(),
+            "completed_at": None,
+            "total_time_spent_seconds": 0,
+            "chapters_progress": []
+        }
+        
+        # Ajouter au tableau
+        if "sections_progress" not in progress:
+            progress["sections_progress"] = []
+        
+        progress["sections_progress"].append(section_progress)
+        section_index = len(progress["sections_progress"]) - 1
+    
+    # 4. Trouver ou créer le chapitre dans la section
+    chapter_progress = None
+    chapter_index = None
+    
+    for idx, cp in enumerate(section_progress.get("chapters_progress", [])):
+        if str(cp["chapter_id"]) == chapter_id:
+            chapter_progress = cp
+            chapter_index = idx
+            break
+    
+    # 🎯 SI le chapitre n'existe pas, le créer
+    if not chapter_progress:
+        # Créer la progression du chapitre
+        chapter_progress = {
+            "chapter_id": chapter_id,
+            "status": "in_progress",
+            "is_unlocked": True,  # Si on peut passer le quiz, c'est qu'il est débloqué
+            "unlocked_at": datetime.utcnow(),
+            "unlocked_by": "auto",
+            "completion_percentage": 0,
+            "avg_score": 0,
+            "started_at": datetime.utcnow(),
+            "completed_at": None,
+            "total_time_spent_seconds": 0,
+            "quizzes_progress": []
+        }
+        
+        # Ajouter au tableau
+        section_progress["chapters_progress"].append(chapter_progress)
+        chapter_index = len(section_progress["chapters_progress"]) - 1
+    
+    # 5. Trouver ou créer la progression du quiz
+    quiz_progress = None
+    quiz_index = None
+    
+    for idx, qp in enumerate(chapter_progress.get("quizzes_progress", [])):
+        if str(qp["quiz_id"]) == quiz_id:
+            quiz_progress = qp
+            quiz_index = idx
+            break
+    
+    # 🎯 SI le quiz n'existe pas, le créer
+    if not quiz_progress:
+        quiz_progress = {
+            "quiz_id": quiz_id,
+            "status": "not_attempted",
+            "attempts_count": 0,
+            "best_score": 0,
+            "last_attempt_score": 0,
+            "last_attempt_at": None
+        }
+        chapter_progress["quizzes_progress"].append(quiz_progress)
+        quiz_index = len(chapter_progress["quizzes_progress"]) - 1
+    
+    # 6. 🎯 Mettre à jour la progression du quiz
+    quiz_progress["attempts_count"] = quiz_progress.get("attempts_count", 0) + 1
+    quiz_progress["last_attempt_score"] = score_percentage
+    quiz_progress["last_attempt_at"] = datetime.utcnow()
+    
+    # Mettre à jour le meilleur score
+    if score_percentage > quiz_progress.get("best_score", 0):
+        quiz_progress["best_score"] = score_percentage
+    
+    # Mettre à jour le statut
+    if passed:
+        quiz_progress["status"] = "passed"
+    elif quiz_progress.get("status") == "not_attempted":
+        quiz_progress["status"] = "failed"
+    
+    # Mettre à jour dans chapter_progress
+    chapter_progress["quizzes_progress"][quiz_index] = quiz_progress
+    
+    # 7. 🎯 Recalculer la progression du chapitre
+    total_quizzes = len(chapter_progress["quizzes_progress"])
+    passed_quizzes = len([q for q in chapter_progress["quizzes_progress"] if q.get("status") == "passed"])
+    
+    if total_quizzes > 0:
+        chapter_progress["completion_percentage"] = (passed_quizzes / total_quizzes) * 100
+        
+        # Calculer le score moyen
+        scores = [q["best_score"] for q in chapter_progress["quizzes_progress"] if q.get("best_score", 0) > 0]
+        chapter_progress["avg_score"] = sum(scores) / len(scores) if scores else 0
+    
+    # Mettre à jour le statut du chapitre
+    if passed_quizzes == total_quizzes and total_quizzes > 0:
+        chapter_progress["status"] = "completed"
+        if not chapter_progress.get("completed_at"):
+            chapter_progress["completed_at"] = datetime.utcnow()
+    elif passed_quizzes > 0:
+        chapter_progress["status"] = "in_progress"
+    
+    # Mettre à jour dans section_progress
+    section_progress["chapters_progress"][chapter_index] = chapter_progress
+    
+    # 8. 🎯 Vérifier déblocage du chapitre suivant
+    if chapter_progress["status"] == "completed":
+        next_chapter_index = chapter_index + 1
+        
+        if next_chapter_index < len(section_progress["chapters_progress"]):
+            next_chapter_progress = section_progress["chapters_progress"][next_chapter_index]
+            
+            next_chapter_data = ChapterModel.get_chapter_by_id(str(next_chapter_progress["chapter_id"]))
+            
+            if next_chapter_data:
+                unlock_conditions = next_chapter_data.get("unlock_conditions", {})
+                min_score = unlock_conditions.get("min_score", 0)
+                completion_required = unlock_conditions.get("completion_required", True)
+                
+                can_unlock = (
+                    chapter_progress["avg_score"] >= min_score and
+                    (not completion_required or chapter_progress["status"] == "completed")
+                )
+                
+                if can_unlock and not next_chapter_progress.get("is_unlocked"):
+                    next_chapter_progress["is_unlocked"] = True
+                    next_chapter_progress["unlocked_at"] = datetime.utcnow()
+                    next_chapter_progress["unlocked_by"] = "auto"
+                    
+                    section_progress["chapters_progress"][next_chapter_index] = next_chapter_progress
+    
+    # 9. 🎯 Recalculer la progression de la section
+    total_chapters = len(section_progress["chapters_progress"])
+    completed_chapters = len([c for c in section_progress["chapters_progress"] if c.get("status") == "completed"])
+    
+    if total_chapters > 0:
+        section_progress["completion_percentage"] = (completed_chapters / total_chapters) * 100
+    
+    if completed_chapters == total_chapters and total_chapters > 0:
+        section_progress["status"] = "completed"
+        if not section_progress.get("completed_at"):
+            section_progress["completed_at"] = datetime.utcnow()
+    elif completed_chapters > 0:
+        section_progress["status"] = "in_progress"
+    
+    # Mettre à jour dans progress
+    progress["sections_progress"][section_index] = section_progress
+    
+    # 10. 🎯 Mettre à jour les statistiques globales
+    overall_stats = progress.get("overall_stats", {})
+    overall_stats["total_quiz_completed"] = overall_stats.get("total_quiz_completed", 0) + 1
+    
+    if passed:
+        overall_stats["total_quiz_passed"] = overall_stats.get("total_quiz_passed", 0) + 1
+    
+    # Recalculer le score moyen global
+    all_quiz_scores = []
+    for sp in progress["sections_progress"]:
+        for cp in sp.get("chapters_progress", []):
+            for qp in cp.get("quizzes_progress", []):
+                if qp.get("best_score", 0) > 0:
+                    all_quiz_scores.append(qp["best_score"])
+    
+    if all_quiz_scores:
+        overall_stats["avg_score"] = sum(all_quiz_scores) / len(all_quiz_scores)
+    
+    # Mettre à jour le streak
+    today = datetime.utcnow().date()
+    last_activity = progress.get("last_activity_date")
+    
+    if last_activity:
+        last_date = last_activity.date() if isinstance(last_activity, datetime) else last_activity
+        days_diff = (today - last_date).days
+        
+        if days_diff == 0:
+            pass
+        elif days_diff == 1:
+            overall_stats["current_streak_days"] = overall_stats.get("current_streak_days", 0) + 1
+            
+            if overall_stats["current_streak_days"] > overall_stats.get("longest_streak_days", 0):
+                overall_stats["longest_streak_days"] = overall_stats["current_streak_days"]
+        else:
+            overall_stats["current_streak_days"] = 1
+    else:
+        overall_stats["current_streak_days"] = 1
+        overall_stats["longest_streak_days"] = 1
+    
+    progress["overall_stats"] = overall_stats
+    progress["last_activity_date"] = datetime.utcnow()
+    
+    # 11. 🎯 Sauvegarder dans MongoDB
+    UserProgressModel.get_collection().update_one(
+        {"_id": ObjectId(progress["_id"])},
+        {"$set": {
+            "sections_progress": progress["sections_progress"],
+            "overall_stats": progress["overall_stats"],
+            "last_activity_date": progress["last_activity_date"],
+            "updated_at": datetime.utcnow()
+        }}
+    )
