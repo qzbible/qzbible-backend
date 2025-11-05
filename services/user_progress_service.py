@@ -360,3 +360,204 @@ def reset_user_progress_service(user_id, church_id, section_id=None):
         })
         
         return {"message": "Progression complète réinitialisée"}, 200
+    
+
+
+# services/user_progress_service.py
+
+def get_current_section_service(user_id, church_id):
+    """
+    Récupère la section actuellement en cours pour un utilisateur.
+    
+    Logique :
+    - Section avec status "in_progress" et la plus avancée
+    - Si plusieurs en cours, retourner celle avec le plus de progression
+    - Si aucune en cours, retourner la première section non complétée
+    """
+    progress = UserProgressModel.get_progress_by_user(user_id, church_id)
+    
+    if not progress or not progress.get("sections_progress"):
+        return {"message": "Aucune progression trouvée"}, 404
+    
+    sections_progress = progress.get("sections_progress", [])
+    
+    # 1. Chercher les sections "in_progress"
+    in_progress_sections = [
+        s for s in sections_progress 
+        if s.get("status") == "in_progress"
+    ]
+    
+    if in_progress_sections:
+        # Trier par progression décroissante
+        in_progress_sections.sort(
+            key=lambda x: x.get("completion_percentage", 0), 
+            reverse=True
+        )
+        current_section = in_progress_sections[0]
+    else:
+        # 2. Si aucune en cours, chercher la première "not_started"
+        not_started_sections = [
+            s for s in sections_progress 
+            if s.get("status") == "not_started"
+        ]
+        
+        if not_started_sections:
+            current_section = not_started_sections[0]
+        else:
+            # 3. Toutes les sections sont complétées
+            return {
+                "message": "Toutes les sections sont complétées",
+                "all_completed": True
+            }, 200
+    
+    # Enrichir avec les informations de la section
+    section = SectionModel.get_section_by_id(current_section["section_id"])
+    
+    if not section:
+        return {"message": "Section non trouvée"}, 404
+    
+    # Trouver le chapitre actuel (premier non complété ou en cours)
+    current_chapter = None
+    next_chapter = None
+    
+    for chapter_prog in current_section.get("chapters_progress", []):
+        if chapter_prog.get("status") in ["not_started", "in_progress"]:
+            if not current_chapter:
+                current_chapter = chapter_prog
+            elif not next_chapter:
+                next_chapter = chapter_prog
+                break
+    
+    # Enrichir le chapitre actuel
+    if current_chapter:
+        chapter_data = ChapterModel.get_chapter_by_id(current_chapter["chapter_id"])
+        if chapter_data:
+            current_chapter["chapter_info"] = {
+                "title": chapter_data.get("title"),
+                "description": chapter_data.get("description"),
+                "order": chapter_data.get("order")
+            }
+    
+    # Enrichir le chapitre suivant
+    if next_chapter:
+        chapter_data = ChapterModel.get_chapter_by_id(next_chapter["chapter_id"])
+        if chapter_data:
+            next_chapter["chapter_info"] = {
+                "title": chapter_data.get("title"),
+                "description": chapter_data.get("description"),
+                "order": chapter_data.get("order")
+            }
+    
+    result = {
+        "section": {
+            "_id": section["_id"],
+            "title": section.get("title"),
+            "description": section.get("description"),
+            "is_sequential": section.get("is_sequential"),
+            "order": section.get("order")
+        },
+        "progress": {
+            "status": current_section.get("status"),
+            "completion_percentage": current_section.get("completion_percentage", 0),
+            "total_time_spent_seconds": current_section.get("total_time_spent_seconds", 0),
+            "started_at": current_section.get("started_at"),
+            "total_chapters": len(current_section.get("chapters_progress", [])),
+            "completed_chapters": len([
+                c for c in current_section.get("chapters_progress", []) 
+                if c.get("status") == "completed"
+            ])
+        },
+        "current_chapter": current_chapter,
+        "next_chapter": next_chapter
+    }
+    
+    return result, 200
+
+
+def get_recommended_next_action_service(user_id, church_id):
+    """
+    Recommande la prochaine action à effectuer par l'utilisateur.
+    """
+    progress = UserProgressModel.get_progress_by_user(user_id, church_id)
+    
+    if not progress or not progress.get("sections_progress"):
+        # Aucune progression, recommander de commencer
+        from models.section_model import SectionModel
+        sections = SectionModel.get_all_sections_by_church(church_id)
+        
+        if sections:
+            first_section = sections[0]
+            return {
+                "action": "start_first_section",
+                "message": "Commencez votre formation !",
+                "section": {
+                    "_id": str(first_section["_id"]),
+                    "title": first_section.get("title"),
+                    "description": first_section.get("description")
+                }
+            }, 200
+        else:
+            return {
+                "action": "no_content",
+                "message": "Aucun contenu disponible pour le moment"
+            }, 200
+    
+    sections_progress = progress.get("sections_progress", [])
+    
+    # Chercher une section en cours
+    for section_prog in sections_progress:
+        if section_prog.get("status") == "in_progress":
+            # Chercher le premier chapitre non complété
+            for chapter_prog in section_prog.get("chapters_progress", []):
+                if chapter_prog.get("is_unlocked") and chapter_prog.get("status") != "completed":
+                    chapter = ChapterModel.get_chapter_by_id(chapter_prog["chapter_id"])
+                    
+                    # Chercher un quiz non passé dans ce chapitre
+                    for quiz_prog in chapter_prog.get("quizzes_progress", []):
+                        if quiz_prog.get("status") in ["not_attempted", "failed"]:
+                            quiz = QuizModel.get_quiz_by_id(quiz_prog["quiz_id"])
+                            
+                            return {
+                                "action": "take_quiz",
+                                "message": f"Continuez avec le quiz : {quiz.get('title')}",
+                                "chapter": {
+                                    "_id": str(chapter["_id"]),
+                                    "title": chapter.get("title")
+                                },
+                                "quiz": {
+                                    "_id": str(quiz["_id"]),
+                                    "title": quiz.get("title")
+                                }
+                            }, 200
+                    
+                    # Pas de quiz en attente, recommander de lire le chapitre
+                    return {
+                        "action": "read_chapter",
+                        "message": f"Continuez avec le chapitre : {chapter.get('title')}",
+                        "chapter": {
+                            "_id": str(chapter["_id"]),
+                            "title": chapter.get("title"),
+                            "description": chapter.get("description")
+                        }
+                    }, 200
+    
+    # Aucune section en cours, chercher la première non commencée
+    for section_prog in sections_progress:
+        if section_prog.get("status") == "not_started":
+            section = SectionModel.get_section_by_id(section_prog["section_id"])
+            return {
+                "action": "start_section",
+                "message": f"Commencez la section : {section.get('title')}",
+                "section": {
+                    "_id": str(section["_id"]),
+                    "title": section.get("title"),
+                    "description": section.get("description")
+                }
+            }, 200
+    
+    # Tout est complété !
+    return {
+        "action": "all_completed",
+        "message": "Félicitations ! Vous avez terminé toutes les sections disponibles 🎉",
+        "overall_stats": progress.get("overall_stats")
+    }, 200

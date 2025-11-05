@@ -798,3 +798,232 @@ def reset_progress():
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
+
+# routes/user_progress.py
+
+@user_progress_bp.route("/current-section", methods=["GET"])
+@jwt_required()
+def get_current_section():
+    """
+    Récupérer la section actuellement en cours
+    ---
+    tags:
+      - User Progress
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+    responses:
+      200:
+        description: Section courante récupérée avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Section courante récupérée avec succès"
+            data:
+              type: object
+              properties:
+                section:
+                  type: object
+                  properties:
+                    _id:
+                      type: string
+                      example: "507f1f77bcf86cd799439011"
+                    title:
+                      type: string
+                      example: "Nouveau Converti"
+                    description:
+                      type: string
+                      example: "Formation de base pour les nouveaux convertis"
+                    is_sequential:
+                      type: boolean
+                      example: true
+                    order:
+                      type: integer
+                      example: 1
+                progress:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [not_started, in_progress, completed]
+                      example: "in_progress"
+                    completion_percentage:
+                      type: number
+                      example: 45.5
+                      description: Pourcentage de complétion de la section
+                    total_time_spent_seconds:
+                      type: integer
+                      example: 3600
+                      description: Temps total passé en secondes
+                    started_at:
+                      type: string
+                      format: date-time
+                    total_chapters:
+                      type: integer
+                      example: 5
+                      description: Nombre total de chapitres
+                    completed_chapters:
+                      type: integer
+                      example: 2
+                      description: Nombre de chapitres complétés
+                current_chapter:
+                  type: object
+                  description: Chapitre actuellement en cours ou à faire
+                  properties:
+                    chapter_id:
+                      type: string
+                    status:
+                      type: string
+                    is_unlocked:
+                      type: boolean
+                    completion_percentage:
+                      type: number
+                    chapter_info:
+                      type: object
+                      properties:
+                        title:
+                          type: string
+                          example: "La Foi"
+                        description:
+                          type: string
+                        order:
+                          type: integer
+                next_chapter:
+                  type: object
+                  description: Prochain chapitre à débloquer
+                  properties:
+                    chapter_id:
+                      type: string
+                    is_unlocked:
+                      type: boolean
+                    chapter_info:
+                      type: object
+      404:
+        description: Aucune progression trouvée
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Aucune progression trouvée"
+      401:
+        description: Token JWT manquant ou invalide
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
+        result, status = get_current_section_service(current_user_id, str(user["church_id"]))
+        
+        if status == 404:
+            return jsonify(result), status
+        
+        return jsonify({
+            "message": "Section courante récupérée avec succès",
+            "data": result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+
+
+@user_progress_bp.route("/next-action", methods=["GET"])
+@jwt_required()
+def get_next_action():
+    """
+    Récupérer la prochaine action recommandée
+    ---
+    tags:
+      - User Progress
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+    responses:
+      200:
+        description: Prochaine action recommandée
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Prochaine action récupérée avec succès"
+            data:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [start_first_section, start_section, read_chapter, take_quiz, all_completed, no_content]
+                  example: "take_quiz"
+                  description: Type d'action recommandée
+                message:
+                  type: string
+                  example: "Continuez avec le quiz : Test de connaissance - La Foi"
+                chapter:
+                  type: object
+                  description: Chapitre concerné (si applicable)
+                  properties:
+                    _id:
+                      type: string
+                    title:
+                      type: string
+                quiz:
+                  type: object
+                  description: Quiz à passer (si action = take_quiz)
+                  properties:
+                    _id:
+                      type: string
+                    title:
+                      type: string
+                section:
+                  type: object
+                  description: Section concernée (si action = start_section)
+                  properties:
+                    _id:
+                      type: string
+                    title:
+                      type: string
+                    description:
+                      type: string
+      401:
+        description: Token JWT manquant ou invalide
+      404:
+        description: Utilisateur non trouvé
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
+        result, status = get_recommended_next_action_service(current_user_id, str(user["church_id"]))
+        
+        return jsonify({
+            "message": "Prochaine action récupérée avec succès",
+            "data": result
+        }), status
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
