@@ -5,6 +5,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from schemas.user_progress_schema import ManualUnlockSchema
 from services.user_progress_service import (
+    get_current_section_service,
+    get_recommended_next_action_service,
     get_user_progress_service,
     get_section_progress_service,
     get_chapter_progress_service,
