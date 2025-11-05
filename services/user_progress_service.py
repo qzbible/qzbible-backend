@@ -366,21 +366,136 @@ def reset_user_progress_service(user_id, church_id, section_id=None):
 
 
 # services/user_progress_service.py
-
 def get_current_section_service(user_id, church_id):
     """
-    Récupère la section actuellement en cours pour un utilisateur.
+    Récupère la section actuellement en cours ou initialise la première section.
+    Si la section est terminée, inclut aussi la prochaine section à commencer.
     
     Logique :
-    - Section avec status "in_progress" et la plus avancée
-    - Si plusieurs en cours, retourner celle avec le plus de progression
-    - Si aucune en cours, retourner la première section non complétée
+    1. Section "in_progress" avec la plus haute progression
+    2. Si aucune en cours, la dernière section "completed" + next_section
+    3. Si aucune complétée, la première "not_started"
+    4. Si aucune progression, récupérer et initialiser la première section de l'église
     """
     progress = UserProgressModel.get_progress_by_user(user_id, church_id)
     
+    # 🎯 CAS 1 : Aucune progression du tout
     if not progress or not progress.get("sections_progress"):
-        return {"message": "Aucune progression trouvée"}, 404
+        # Récupérer la première section de l'église
+        sections = SectionModel.get_all_sections_by_church(church_id)
+        
+        if not sections or len(sections) == 0:
+            return {"message": "Aucune section disponible dans cette église"}, 404
+        
+        # Trier par ordre
+        sections.sort(key=lambda x: x.get("order", 0))
+        first_section = sections[0]
+        
+        # Récupérer tous les chapitres de cette section
+        chapters = ChapterModel.get_all_chapters_by_section(str(first_section["_id"]))
+        chapters.sort(key=lambda x: x.get("order", 0))
+        
+        # Construire la structure initiale
+        chapters_progress = []
+        total_quizzes = 0
+        
+        for idx, chapter in enumerate(chapters):
+            # Récupérer les quiz du chapitre
+            quizzes = QuizModel.get_all_quizzes_by_chapter(str(chapter["_id"]))
+            
+            quizzes_progress = []
+            for quiz in quizzes:
+                quizzes_progress.append({
+                    "quiz_id": str(quiz["_id"]),
+                    "status": "not_attempted",
+                    "attempts_count": 0,
+                    "best_score": 0,
+                    "last_attempt_score": 0,
+                    "last_attempt_at": None
+                })
+            
+            total_quizzes += len(quizzes)
+            
+            # Premier chapitre débloqué, autres verrouillés
+            is_first = idx == 0
+            
+            chapters_progress.append({
+                "chapter_id": str(chapter["_id"]),
+                "status": "not_started",
+                "is_unlocked": is_first,
+                "unlocked_at": datetime.utcnow() if is_first else None,
+                "unlocked_by": "auto" if is_first else None,
+                "completion_percentage": 0,
+                "avg_score": 0,
+                "started_at": None,
+                "completed_at": None,
+                "total_time_spent_seconds": 0,
+                "quizzes_progress": quizzes_progress
+            })
+        
+        # Construire la réponse avec données initiales
+        result = {
+            "section": {
+                "_id": str(first_section["_id"]),
+                "title": first_section.get("title"),
+                "description": first_section.get("description"),
+                "is_sequential": first_section.get("is_sequential"),
+                "order": first_section.get("order")
+            },
+            "state": "not_started",
+            "progress": {
+                "status": "not_started",
+                "completion_percentage": 0,
+                "started_at": None,
+                "completed_at": None,
+                "total_time_spent_seconds": 0
+            },
+            "kpi": {
+                "total_chapters": len(chapters_progress),
+                "completed_chapters": 0,
+                "in_progress_chapters": 0,
+                "not_started_chapters": len(chapters_progress),
+                "total_quizzes": total_quizzes,
+                "completed_quizzes": 0,
+                "avg_score": 0,
+                "success_rate": 0
+            },
+            "current_chapter": None,
+            "next_chapter": None,
+            "next_section": None  # Pas de section suivante pour la première
+        }
+        
+        # Enrichir le premier chapitre (celui qui est débloqué)
+        if chapters_progress:
+            first_chapter_prog = chapters_progress[0]
+            chapter_data = ChapterModel.get_chapter_by_id(first_chapter_prog["chapter_id"])
+            
+            if chapter_data:
+                first_chapter_prog["chapter_info"] = {
+                    "title": chapter_data.get("title"),
+                    "description": chapter_data.get("description"),
+                    "order": chapter_data.get("order")
+                }
+                
+                result["current_chapter"] = first_chapter_prog
+            
+            # Enrichir le deuxième chapitre (next)
+            if len(chapters_progress) > 1:
+                second_chapter_prog = chapters_progress[1]
+                chapter_data = ChapterModel.get_chapter_by_id(second_chapter_prog["chapter_id"])
+                
+                if chapter_data:
+                    second_chapter_prog["chapter_info"] = {
+                        "title": chapter_data.get("title"),
+                        "description": chapter_data.get("description"),
+                        "order": chapter_data.get("order")
+                    }
+                    
+                    result["next_chapter"] = second_chapter_prog
+        
+        return result, 200
     
+    # 🎯 CAS 2 : Progression existe
     sections_progress = progress.get("sections_progress", [])
     
     # 1. Chercher les sections "in_progress"
@@ -396,21 +511,34 @@ def get_current_section_service(user_id, church_id):
             reverse=True
         )
         current_section = in_progress_sections[0]
+        section_state = "in_progress"
     else:
-        # 2. Si aucune en cours, chercher la première "not_started"
-        not_started_sections = [
+        # 2. Si aucune en cours, chercher la dernière "completed"
+        completed_sections = [
             s for s in sections_progress 
-            if s.get("status") == "not_started"
+            if s.get("status") == "completed"
         ]
         
-        if not_started_sections:
-            current_section = not_started_sections[0]
+        if completed_sections:
+            # Trier par date de complétion décroissante (la plus récente)
+            completed_sections.sort(
+                key=lambda x: x.get("completed_at") or datetime.min, 
+                reverse=True
+            )
+            current_section = completed_sections[0]
+            section_state = "completed"
         else:
-            # 3. Toutes les sections sont complétées
-            return {
-                "message": "Toutes les sections sont complétées",
-                "all_completed": True
-            }, 200
+            # 3. Si aucune complétée, chercher la première "not_started"
+            not_started_sections = [
+                s for s in sections_progress 
+                if s.get("status") == "not_started"
+            ]
+            
+            if not_started_sections:
+                current_section = not_started_sections[0]
+                section_state = "not_started"
+            else:
+                return {"message": "Aucune section disponible"}, 404
     
     # Enrichir avec les informations de la section
     section = SectionModel.get_section_by_id(current_section["section_id"])
@@ -418,17 +546,45 @@ def get_current_section_service(user_id, church_id):
     if not section:
         return {"message": "Section non trouvée"}, 404
     
+    # Calculer les KPI de la section
+    chapters_progress = current_section.get("chapters_progress", [])
+    total_chapters = len(chapters_progress)
+    completed_chapters = len([c for c in chapters_progress if c.get("status") == "completed"])
+    in_progress_chapters = len([c for c in chapters_progress if c.get("status") == "in_progress"])
+    not_started_chapters = len([c for c in chapters_progress if c.get("status") == "not_started"])
+    
+    # Calculer le nombre total de quiz
+    total_quizzes = sum(len(c.get("quizzes_progress", [])) for c in chapters_progress)
+    completed_quizzes = sum(
+        len([q for q in c.get("quizzes_progress", []) if q.get("status") == "passed"])
+        for c in chapters_progress
+    )
+    
+    # Calculer le score moyen de la section
+    all_scores = []
+    for chapter in chapters_progress:
+        for quiz in chapter.get("quizzes_progress", []):
+            if quiz.get("best_score", 0) > 0:
+                all_scores.append(quiz["best_score"])
+    
+    avg_section_score = sum(all_scores) / len(all_scores) if all_scores else 0
+    
     # Trouver le chapitre actuel (premier non complété ou en cours)
     current_chapter = None
     next_chapter = None
     
-    for chapter_prog in current_section.get("chapters_progress", []):
+    for chapter_prog in chapters_progress:
         if chapter_prog.get("status") in ["not_started", "in_progress"]:
             if not current_chapter:
                 current_chapter = chapter_prog
             elif not next_chapter:
                 next_chapter = chapter_prog
                 break
+    
+    # Si la section est terminée, le chapitre actuel est le dernier
+    if section_state == "completed" and not current_chapter:
+        if chapters_progress:
+            current_chapter = chapters_progress[-1]  # Dernier chapitre
     
     # Enrichir le chapitre actuel
     if current_chapter:
@@ -450,6 +606,64 @@ def get_current_section_service(user_id, church_id):
                 "order": chapter_data.get("order")
             }
     
+    # 🎯 Si section terminée, récupérer la prochaine section
+    next_section_info = None
+    
+    if section_state == "completed":
+        # Récupérer toutes les sections de l'église
+        all_sections = SectionModel.get_all_sections_by_church(church_id)
+        all_sections.sort(key=lambda x: x.get("order", 0))
+        
+        # Trouver l'index de la section courante
+        current_section_order = section.get("order", 0)
+        
+        # Chercher la prochaine section par ordre
+        for next_section in all_sections:
+            if next_section.get("order", 0) > current_section_order:
+                # Vérifier si cette section existe déjà dans la progression
+                next_section_id = str(next_section["_id"])
+                section_in_progress = any(
+                    str(sp["section_id"]) == next_section_id 
+                    for sp in sections_progress
+                )
+                
+                # Récupérer les chapitres de la prochaine section
+                next_chapters = ChapterModel.get_chapters_by_section(next_section_id)
+                next_chapters.sort(key=lambda x: x.get("order", 0))
+                
+                # Compter les quiz
+                next_total_quizzes = 0
+                for ch in next_chapters:
+                    next_quizzes = QuizModel.get_quizzes_by_chapter(str(ch["_id"]))
+                    next_total_quizzes += len(next_quizzes)
+                
+                # Construire l'info de la prochaine section
+                next_section_info = {
+                    "_id": str(next_section["_id"]),
+                    "title": next_section.get("title"),
+                    "description": next_section.get("description"),
+                    "is_sequential": next_section.get("is_sequential"),
+                    "order": next_section.get("order"),
+                    "is_started": section_in_progress,
+                    "preview": {
+                        "total_chapters": len(next_chapters),
+                        "total_quizzes": next_total_quizzes
+                    }
+                }
+                
+                # Si pas encore commencée, ajouter le premier chapitre
+                if not section_in_progress and next_chapters:
+                    first_chapter = next_chapters[0]
+                    next_section_info["first_chapter"] = {
+                        "_id": str(first_chapter["_id"]),
+                        "title": first_chapter.get("title"),
+                        "description": first_chapter.get("description"),
+                        "order": first_chapter.get("order")
+                    }
+                
+                break  # On a trouvé la prochaine section
+    
+    # Construire la réponse avec KPI
     result = {
         "section": {
             "_id": section["_id"],
@@ -458,19 +672,27 @@ def get_current_section_service(user_id, church_id):
             "is_sequential": section.get("is_sequential"),
             "order": section.get("order")
         },
+        "state": section_state,  # "in_progress", "completed", ou "not_started"
         "progress": {
             "status": current_section.get("status"),
-            "completion_percentage": current_section.get("completion_percentage", 0),
-            "total_time_spent_seconds": current_section.get("total_time_spent_seconds", 0),
+            "completion_percentage": round(current_section.get("completion_percentage", 0), 2),
             "started_at": current_section.get("started_at"),
-            "total_chapters": len(current_section.get("chapters_progress", [])),
-            "completed_chapters": len([
-                c for c in current_section.get("chapters_progress", []) 
-                if c.get("status") == "completed"
-            ])
+            "completed_at": current_section.get("completed_at"),
+            "total_time_spent_seconds": current_section.get("total_time_spent_seconds", 0)
+        },
+        "kpi": {
+            "total_chapters": total_chapters,
+            "completed_chapters": completed_chapters,
+            "in_progress_chapters": in_progress_chapters,
+            "not_started_chapters": not_started_chapters,
+            "total_quizzes": total_quizzes,
+            "completed_quizzes": completed_quizzes,
+            "avg_score": round(avg_section_score, 2),
+            "success_rate": round((completed_quizzes / total_quizzes * 100), 2) if total_quizzes > 0 else 0
         },
         "current_chapter": current_chapter,
-        "next_chapter": next_chapter
+        "next_chapter": next_chapter,
+        "next_section": next_section_info  # 🎯 Prochaine section
     }
     
     return result, 200
