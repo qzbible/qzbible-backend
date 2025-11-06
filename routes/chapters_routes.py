@@ -8,6 +8,7 @@ from services.chapter_service import (
     create_chapter_service,
     get_all_chapters_service,
     get_chapter_by_id_service,
+    get_chapters_with_progress_service,
     update_chapter_service,
     delete_chapter_service,
     get_chapters_with_creator_info,
@@ -663,6 +664,161 @@ def clone_chapter(chapter_id):
             current_user_id
         )
         return jsonify(result), status
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
+
+@chapters_bp.route("/section/<section_id>/with-progress", methods=["GET"])
+@jwt_required()
+def list_by_section_with_progress(section_id):
+    """
+    Récupérer tous les chapitres d'une section avec la progression de l'utilisateur
+    ---
+    tags:
+      - Chapters
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: path
+        name: section_id
+        type: string
+        required: true
+        description: ID de la section
+        example: "507f1f77bcf86cd799439011"
+    responses:
+      200:
+        description: Liste des chapitres avec progression récupérée avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Chapitres avec progression récupérés avec succès"
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  _id:
+                    type: string
+                    example: "507f1f77bcf86cd799439020"
+                  section_id:
+                    type: string
+                    example: "507f1f77bcf86cd799439011"
+                  title:
+                    type: string
+                    example: "La Foi"
+                  description:
+                    type: string
+                    example: "Introduction à la foi chrétienne"
+                  order:
+                    type: integer
+                    example: 1
+                  content:
+                    type: object
+                  unlock_requirements:
+                    type: object
+                  progress:
+                    type: object
+                    description: Progression de l'utilisateur sur ce chapitre
+                    properties:
+                      status:
+                        type: string
+                        enum: [not_started, in_progress, completed]
+                        example: "in_progress"
+                        description: Statut du chapitre
+                      is_unlocked:
+                        type: boolean
+                        example: true
+                        description: Si le chapitre est débloqué
+                      completion_percentage:
+                        type: number
+                        example: 66.67
+                        description: Pourcentage de complétion
+                      avg_score:
+                        type: number
+                        example: 85.5
+                        description: Score moyen sur les quiz
+                      quizzes_total:
+                        type: integer
+                        example: 3
+                        description: Nombre total de quiz
+                      quizzes_passed:
+                        type: integer
+                        example: 2
+                        description: Nombre de quiz réussis
+                      started_at:
+                        type: string
+                        format: date-time
+                        description: Date de début
+                      completed_at:
+                        type: string
+                        format: date-time
+                        description: Date de complétion
+            stats:
+              type: object
+              description: Statistiques globales de la section
+              properties:
+                total_chapters:
+                  type: integer
+                  example: 5
+                completed_chapters:
+                  type: integer
+                  example: 2
+                in_progress_chapters:
+                  type: integer
+                  example: 1
+                not_started_chapters:
+                  type: integer
+                  example: 2
+                overall_completion:
+                  type: number
+                  example: 40.0
+      401:
+        description: Token JWT manquant ou invalide
+      403:
+        description: Accès non autorisé
+      404:
+        description: Section non trouvée
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
+        # Vérifier que la section appartient à l'église
+        from models.section_model import SectionModel
+        section = SectionModel.get_section_by_id(section_id)
+        
+        if not section:
+            return jsonify({"message": "Section non trouvée"}), 404
+        
+        if section["church_id"] != str(user["church_id"]):
+            return jsonify({"message": "Accès non autorisé"}), 403
+        
+        # Récupérer les chapitres avec progression
+        chapters_with_progress = get_chapters_with_progress_service(
+            section_id, 
+            current_user_id, 
+            str(user["church_id"])
+        )
+        
+        return jsonify({
+            "message": "Chapitres avec progression récupérés avec succès",
+            "data": chapters_with_progress["chapters"],
+            "stats": chapters_with_progress["stats"]
+        }), 200
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500

@@ -5,6 +5,7 @@ from models.chapter_model import ChapterModel
 from models.section_model import SectionModel
 from models.user_model import UserModel
 import json
+from models.user_progress_model import UserProgressModel
 
 def create_chapter_service(data):
     """
@@ -202,3 +203,111 @@ def clone_chapter_service(chapter_id, new_section_id, new_church_id, cloned_by):
         "message": "Chapitre cloné avec succès",
         "chapter_id": result["chapter_id"]
     }, 201
+
+
+
+ 
+
+def get_chapters_with_progress_service(section_id, user_id, church_id):
+    """
+    Récupère tous les chapitres d'une section avec la progression de l'utilisateur.
+    
+    Marque chaque chapitre comme :
+    - not_started : Pas encore commencé
+    - in_progress : En cours (au moins 1 quiz tenté, pas tous complétés)
+    - completed : Terminé (tous les quiz réussis)
+    """
+
+    
+    # 1. Récupérer tous les chapitres de la section
+    chapters = ChapterModel.get_all_chapters_by_section(section_id)
+    chapters.sort(key=lambda x: x.get("order", 0))
+    
+    # 2. Récupérer la progression de l'utilisateur
+    progress = UserProgressModel.get_progress_by_user(user_id, church_id)
+    
+    # 3. Créer un map de progression par chapitre
+    chapter_progress_map = {}
+    
+    if progress and progress.get("sections_progress"):
+        for section_prog in progress["sections_progress"]:
+            if str(section_prog["section_id"]) == str(section_id):
+                for chapter_prog in section_prog.get("chapters_progress", []):
+                    chapter_progress_map[str(chapter_prog["chapter_id"])] = chapter_prog
+                break
+    
+    # 4. Enrichir chaque chapitre avec sa progression
+    enriched_chapters = []
+    stats = {
+        "total_chapters": len(chapters),
+        "completed_chapters": 0,
+        "in_progress_chapters": 0,
+        "not_started_chapters": 0,
+        "overall_completion": 0
+    }
+    
+    for chapter in chapters:
+        chapter_id = str(chapter["_id"])
+        
+        # Convertir les ObjectId en string
+        chapter["_id"] = chapter_id
+        chapter["section_id"] = str(chapter["section_id"])
+        
+        # Récupérer la progression de ce chapitre
+        chapter_prog = chapter_progress_map.get(chapter_id)
+        
+        if chapter_prog:
+            # Chapitre avec progression
+            status = chapter_prog.get("status", "not_started")
+            
+            progress_info = {
+                "status": status,
+                "is_unlocked": chapter_prog.get("is_unlocked", False),
+                "completion_percentage": round(chapter_prog.get("completion_percentage", 0), 2),
+                "avg_score": round(chapter_prog.get("avg_score", 0), 2),
+                "quizzes_total": len(chapter_prog.get("quizzes_progress", [])),
+                "quizzes_passed": len([
+                    q for q in chapter_prog.get("quizzes_progress", []) 
+                    if q.get("status") == "passed"
+                ]),
+                "started_at": chapter_prog.get("started_at"),
+                "completed_at": chapter_prog.get("completed_at")
+            }
+            
+            # Mettre à jour les stats
+            if status == "completed":
+                stats["completed_chapters"] += 1
+            elif status == "in_progress":
+                stats["in_progress_chapters"] += 1
+            else:
+                stats["not_started_chapters"] += 1
+            
+        else:
+            # Chapitre sans progression (pas encore commencé)
+            progress_info = {
+                "status": "not_started",
+                "is_unlocked": False,
+                "completion_percentage": 0,
+                "avg_score": 0,
+                "quizzes_total": 0,
+                "quizzes_passed": 0,
+                "started_at": None,
+                "completed_at": None
+            }
+            stats["not_started_chapters"] += 1
+        
+        # Ajouter la progression au chapitre
+        chapter["progress"] = progress_info
+        enriched_chapters.append(chapter)
+    
+    # Calculer la complétion globale
+    if stats["total_chapters"] > 0:
+        stats["overall_completion"] = round(
+            (stats["completed_chapters"] / stats["total_chapters"]) * 100, 
+            2
+        )
+    
+    return {
+        "chapters": enriched_chapters,
+        "stats": stats
+    }
