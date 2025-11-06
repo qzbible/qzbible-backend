@@ -2,6 +2,7 @@
 
 from bson import ObjectId
 from models.chapter_model import ChapterModel
+from models.quiz_model import QuizModel
 from models.section_model import SectionModel
 from models.user_model import UserModel
 import json
@@ -206,8 +207,6 @@ def clone_chapter_service(chapter_id, new_section_id, new_church_id, cloned_by):
 
 
 
- 
-
 def get_chapters_with_progress_service(section_id, user_id, church_id):
     """
     Récupère tous les chapitres d'une section avec la progression de l'utilisateur.
@@ -216,25 +215,51 @@ def get_chapters_with_progress_service(section_id, user_id, church_id):
     - not_started : Pas encore commencé
     - in_progress : En cours (au moins 1 quiz tenté, pas tous complétés)
     - completed : Terminé (tous les quiz réussis)
-    """
-
+    
+    Ajoute également l'ID du prochain quiz à faire ou du quiz en cours.
+    
+    🎯 NOUVELLE CONTRAINTE :
+    Si aucun chapitre n'est en cours dans la section, démarre automatiquement
+    le premier chapitre et retourne l'ID de son premier quiz.
+    """ 
     
     # 1. Récupérer tous les chapitres de la section
     chapters = ChapterModel.get_all_chapters_by_section(section_id)
     chapters.sort(key=lambda x: x.get("order", 0))
+    
+    if not chapters:
+        return {
+            "chapters": [],
+            "stats": {
+                "total_chapters": 0,
+                "completed_chapters": 0,
+                "in_progress_chapters": 0,
+                "not_started_chapters": 0,
+                "overall_completion": 0
+            },
+            "recommended_action": None
+        }
     
     # 2. Récupérer la progression de l'utilisateur
     progress = UserProgressModel.get_progress_by_user(user_id, church_id)
     
     # 3. Créer un map de progression par chapitre
     chapter_progress_map = {}
+    section_has_progress = False
     
     if progress and progress.get("sections_progress"):
         for section_prog in progress["sections_progress"]:
             if str(section_prog["section_id"]) == str(section_id):
+                section_has_progress = True
                 for chapter_prog in section_prog.get("chapters_progress", []):
                     chapter_progress_map[str(chapter_prog["chapter_id"])] = chapter_prog
                 break
+    
+    # 🎯 VÉRIFICATION : Aucun chapitre en cours dans cette section
+    has_in_progress_chapter = any(
+        cp.get("status") == "in_progress" 
+        for cp in chapter_progress_map.values()
+    )
     
     # 4. Enrichir chaque chapitre avec sa progression
     enriched_chapters = []
@@ -246,12 +271,18 @@ def get_chapters_with_progress_service(section_id, user_id, church_id):
         "overall_completion": 0
     }
     
-    for chapter in chapters:
+    recommended_action = None
+    
+    for idx, chapter in enumerate(chapters):
         chapter_id = str(chapter["_id"])
         
         # Convertir les ObjectId en string
         chapter["_id"] = chapter_id
         chapter["section_id"] = str(chapter["section_id"])
+        
+        # Récupérer tous les quiz de ce chapitre
+        quizzes = QuizModel.get_all_quizzes_by_chapter(chapter_id)
+        quizzes.sort(key=lambda x: x.get("order", 0))
         
         # Récupérer la progression de ce chapitre
         chapter_prog = chapter_progress_map.get(chapter_id)
@@ -260,18 +291,42 @@ def get_chapters_with_progress_service(section_id, user_id, church_id):
             # Chapitre avec progression
             status = chapter_prog.get("status", "not_started")
             
+            # 🎯 Déterminer le prochain quiz ou quiz en cours
+            next_quiz_id = None
+            current_quiz_id = None
+            
+            quizzes_progress = chapter_prog.get("quizzes_progress", [])
+            quiz_progress_map = {str(qp["quiz_id"]): qp for qp in quizzes_progress}
+            
+            for quiz in quizzes:
+                quiz_id = str(quiz["_id"])
+                quiz_prog = quiz_progress_map.get(quiz_id)
+                
+                if not quiz_prog or quiz_prog.get("status") == "not_attempted":
+                    # Premier quiz non tenté = prochain quiz
+                    next_quiz_id = quiz_id
+                    break
+                elif quiz_prog.get("status") == "failed":
+                    # Quiz échoué = quiz actuel à refaire
+                    current_quiz_id = quiz_id
+                    next_quiz_id = quiz_id
+                    break
+                # Si "passed", continuer vers le suivant
+            
             progress_info = {
                 "status": status,
                 "is_unlocked": chapter_prog.get("is_unlocked", False),
                 "completion_percentage": round(chapter_prog.get("completion_percentage", 0), 2),
                 "avg_score": round(chapter_prog.get("avg_score", 0), 2),
-                "quizzes_total": len(chapter_prog.get("quizzes_progress", [])),
+                "quizzes_total": len(quizzes),
                 "quizzes_passed": len([
-                    q for q in chapter_prog.get("quizzes_progress", []) 
+                    q for q in quizzes_progress 
                     if q.get("status") == "passed"
                 ]),
                 "started_at": chapter_prog.get("started_at"),
-                "completed_at": chapter_prog.get("completed_at")
+                "completed_at": chapter_prog.get("completed_at"),
+                "next_quiz_id": next_quiz_id,
+                "current_quiz_id": current_quiz_id
             }
             
             # Mettre à jour les stats
@@ -284,21 +339,57 @@ def get_chapters_with_progress_service(section_id, user_id, church_id):
             
         else:
             # Chapitre sans progression (pas encore commencé)
+            # Le premier quiz est le prochain
+            next_quiz_id = str(quizzes[0]["_id"]) if quizzes else None
+            
+            # 🎯 Si c'est le premier chapitre ET qu'aucun chapitre n'est en cours
+            is_unlocked = False
+            if idx == 0 and not has_in_progress_chapter:
+                is_unlocked = True
+                
+                # Créer une recommandation d'action
+                if next_quiz_id:
+                    recommended_action = {
+                        "action": "start_first_chapter",
+                        "message": f"Commencez votre formation avec le chapitre : {chapter.get('title')}",
+                        "chapter_id": chapter_id,
+                        "chapter_title": chapter.get("title"),
+                        "quiz_id": next_quiz_id
+                    }
+            
             progress_info = {
                 "status": "not_started",
-                "is_unlocked": False,
+                "is_unlocked": is_unlocked,
                 "completion_percentage": 0,
                 "avg_score": 0,
-                "quizzes_total": 0,
+                "quizzes_total": len(quizzes),
                 "quizzes_passed": 0,
                 "started_at": None,
-                "completed_at": None
+                "completed_at": None,
+                "next_quiz_id": next_quiz_id,
+                "current_quiz_id": None
             }
             stats["not_started_chapters"] += 1
         
         # Ajouter la progression au chapitre
         chapter["progress"] = progress_info
         enriched_chapters.append(chapter)
+    
+    # 🎯 Si aucune action recommandée et qu'il y a des chapitres en cours
+    if not recommended_action and has_in_progress_chapter:
+        # Trouver le premier chapitre en cours
+        for chapter in enriched_chapters:
+            if chapter["progress"]["status"] == "in_progress":
+                quiz_id = chapter["progress"].get("current_quiz_id") or chapter["progress"].get("next_quiz_id")
+                if quiz_id:
+                    recommended_action = {
+                        "action": "continue_chapter",
+                        "message": f"Continuez avec le chapitre : {chapter.get('title')}",
+                        "chapter_id": chapter["_id"],
+                        "chapter_title": chapter.get("title"),
+                        "quiz_id": quiz_id
+                    }
+                    break
     
     # Calculer la complétion globale
     if stats["total_chapters"] > 0:
@@ -309,5 +400,6 @@ def get_chapters_with_progress_service(section_id, user_id, church_id):
     
     return {
         "chapters": enriched_chapters,
-        "stats": stats
+        "stats": stats,
+        "recommended_action": recommended_action
     }
