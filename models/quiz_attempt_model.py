@@ -3,6 +3,7 @@
 from bson import ObjectId
 from datetime import datetime
 from extensions import mongo
+from models.quiz_model import QuizModel
 
 class QuizAttemptModel:
     
@@ -59,7 +60,7 @@ class QuizAttemptModel:
             
             # Convertir les ObjectId dans les réponses
             for answer in attempt.get("answers", []):
-                answer["question_id"] = str(answer["question_id"])
+                answer["question"] = QuizModel.get_question_by_id(str(attempt["quiz_id"]), str(answer["question_id"]))
                 if "selected_options" in answer:
                     answer["selected_options"] = [str(opt_id) for opt_id in answer["selected_options"]]
         
