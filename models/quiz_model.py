@@ -91,7 +91,9 @@ class QuizModel:
         :param quiz_id: ID du quiz
         :param include_answers: Si False, masque les réponses correctes (pour les apprenants)
         :return: dict ou None
+    690be0bff3de6b5ac1c1d92b
 
+    Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MjI5ODE3MywianRpIjoiNzFiMjRkMzMtZTE2Yi00OGU0LWJhMjEtN2MzOWZhNjY5Zjc1IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjY4ZmViMGNmNGE2NDc1ZWUyMTJiZWVmYiIsIm5iZiI6MTc2MjI5ODE3MywiZXhwIjoxNzY3NDgyMTczLCJyb2xlIjoiYWRtaW4ifQ.nUR20CBcAr_uf33eYQhkmVDRWlqBIe4Fk7jARuUcvpI
        
         """
         quiz = QuizModel.get_collection().find_one({"_id": ObjectId(quiz_id)})
@@ -115,10 +117,13 @@ class QuizModel:
                         question.pop("correct_answer", None)
                     
                     elif question["type"] == "fill_blank":
-                        question.pop("correct_answers", None)
+                        # Retirer toutes les réponses correctes
+                        #question.pop("correct_answers", None)
+                        print("question before removing correct_answers:", question)
                     
                     elif question["type"] == "free_text":
-                        question.pop("expected_keywords", None)
+                        #question.pop("expected_keywords", None)
+                        print("question before removing expected_keywords:", question)
             else:
                 # Convertir les ObjectId dans les questions
                 for question in quiz.get("questions", []):
