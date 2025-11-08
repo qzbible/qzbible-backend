@@ -34,10 +34,11 @@ def start_quiz_attempt_service(quiz_id, user_id, church_id):
     if max_attempts > 0:
         attempt_count = QuizAttemptModel.count_user_attempts(user_id, quiz_id)
         if attempt_count >= max_attempts:
-            return {
-                "message": f"Nombre maximum de tentatives atteint ({max_attempts})",
-                "attempts_used": attempt_count
-            }, 403
+            print(f"[WARN] Utilisateur {user_id} a atteint le nombre maximum de tentatives pour le quiz {quiz_id}")
+            # return {
+            #     "message": f"Nombre maximum de tentatives atteint ({max_attempts})",
+            #     "attempts_used": attempt_count
+            # }, 403
     
     # Calculer le numéro de tentative
     attempt_number = QuizAttemptModel.count_user_attempts(user_id, quiz_id) + 1
@@ -502,7 +503,7 @@ def get_user_attempts_service(user_id, quiz_id=None):
 
 def get_attempt_by_id_service(attempt_id, user_id):
     """
-    Récupère une tentative par son ID.
+    Récupère une tentative par son ID. 
     """
     attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)
     
