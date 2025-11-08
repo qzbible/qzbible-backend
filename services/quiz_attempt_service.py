@@ -2,6 +2,7 @@
 
 from bson import ObjectId
 from datetime import datetime
+from models.chapter_model import ChapterModel
 from models.quiz_attempt_model import QuizAttemptModel
 from models.quiz_model import QuizModel
 from models.user_model import UserModel
@@ -63,115 +64,326 @@ def start_quiz_attempt_service(quiz_id, user_id, church_id):
     
     return result, 201
 
-def submit_quiz_attempt_service(attempt_id, answers_data, user_id):
+
+def submit_quiz_attempt_service(attempt_id, answers, user_id):
     """
-    Soumet une tentative et calcule le score.
+    Soumet une tentative de quiz et calcule le score.
+    Gère tous les types de questions : mcq_single, mcq_multiple, true_false, fill_blank, free_text
     """
-    # Récupérer la tentative
+    # 1. Récupérer la tentative
     attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)
+    
     if not attempt:
         return {"message": "Tentative non trouvée"}, 404
     
-    # Vérifier que la tentative appartient à l'utilisateur
-    if attempt["user_id"] != str(user_id):
+    # 2. Vérifier que la tentative appartient à l'utilisateur
+    if str(attempt["user_id"]) != str(user_id):
         return {"message": "Accès non autorisé à cette tentative"}, 403
     
-    # Vérifier que la tentative est en cours
-    if attempt["status"] != "in_progress":
-        return {"message": "Cette tentative a déjà été soumise ou abandonnée"}, 400
+    # 3. Vérifier que la tentative n'est pas déjà soumise
+    if attempt.get("status") == "completed":
+        return {"message": "Cette tentative a déjà été soumise"}, 400
     
-    # Récupérer le quiz avec les réponses
-    quiz = QuizModel.get_quiz_by_id(attempt["quiz_id"], include_answers=True)
+    # 4. Récupérer le quiz complet
+    quiz = QuizModel.get_quiz_by_id(str(attempt["quiz_id"]))
+    
     if not quiz:
         return {"message": "Quiz non trouvé"}, 404
     
-    # Créer un map des questions pour accès rapide
-    questions_map = {str(q["_id"]): q for q in quiz.get("questions", [])}
+    # 5. Créer un map des questions par ID
+    questions_map = {}
+    for question in quiz.get("questions", []):
+        question_id = str(question.get("_id", ""))
+        questions_map[question_id] = question
     
-    # Évaluer chaque réponse
+    # 6. Évaluer chaque réponse
     evaluated_answers = []
-    total_score = 0
+    total_points_earned = 0
+    total_points_possible = 0
     
-    for answer_data in answers_data:
-        question_id = answer_data["question_id"]
+    for answer in answers:
+        question_id = str(answer.get("question_id"))
         question = questions_map.get(question_id)
         
         if not question:
             continue
         
-        answer = {
-            "question_id": ObjectId(question_id),
-            "question_type": answer_data["question_type"],
-            "points_possible": question.get("points", 0),
-            "time_spent_seconds": answer_data.get("time_spent_seconds", 0)
-        }
+        question_type = answer.get("question_type") or question.get("type")
+        points_possible = question.get("points", 0)
+        total_points_possible += points_possible
         
         # Évaluer selon le type de question
-        if answer_data["question_type"] in ["mcq_single", "mcq_multiple", "true_false"]:
-            answer["selected_options"] = [ObjectId(opt) for opt in answer_data.get("selected_options", [])]
-            is_correct, points = evaluate_mcq_answer(question, answer["selected_options"])
-            answer["is_correct"] = is_correct
-            answer["points_earned"] = points
-            
-        elif answer_data["question_type"] == "fill_blank":
-            answer["fill_blank_answers"] = answer_data.get("fill_blank_answers", [])
-            is_correct, points = evaluate_fill_blank_answer(question, answer["fill_blank_answers"])
-            answer["is_correct"] = is_correct
-            answer["points_earned"] = points
-            
-        elif answer_data["question_type"] == "free_text":
-            answer["free_text_answer"] = answer_data.get("free_text_answer", "")
-            is_correct, points = evaluate_free_text_answer(question, answer["free_text_answer"])
-            answer["is_correct"] = is_correct
-            answer["points_earned"] = points
+        if question_type == "mcq_single":
+            result = evaluate_mcq_single(answer, question)
+        elif question_type == "mcq_multiple":
+            result = evaluate_mcq_multiple(answer, question)
+        elif question_type == "true_false":
+            result = evaluate_true_false(answer, question)
+        elif question_type == "fill_blank":
+            result = evaluate_fill_blank(answer, question)
+        elif question_type == "free_text":
+            result = evaluate_free_text(answer, question)
+        else:
+            result = {
+                "is_correct": False,
+                "points_earned": 0
+            }
         
-        total_score += answer.get("points_earned", 0)
-        evaluated_answers.append(answer)
+        total_points_earned += result["points_earned"]
+        
+        # Construire la réponse évaluée
+        evaluated_answer = {
+            "question_id": question_id,
+            "question_type": question_type,
+            "selected_options": answer.get("selected_options", []),
+            "fill_blank_answers": answer.get("fill_blank_answers", []),
+            "text_answer": answer.get("free_text_answer"),
+            "is_correct": result["is_correct"],
+            "points_earned": result["points_earned"],
+            "points_possible": points_possible,
+            "time_spent_seconds": answer.get("time_spent_seconds", 0)
+        }
+        
+        evaluated_answers.append(evaluated_answer)
     
-    # Calculer le temps passé
-    started_at = attempt.get("started_at")
-    time_spent = int((datetime.utcnow() - started_at).total_seconds()) if started_at else 0
+    # 7. Calculer le score en pourcentage
+    if total_points_possible > 0:
+        score_percentage = (total_points_earned / total_points_possible) * 100
+    else:
+        score_percentage = 0
     
-    # Déterminer si le quiz est réussi
-    max_score = attempt.get("max_score", 100)
-    pass_score = attempt.get("pass_score", 70)
-    score_percentage = (total_score / max_score * 100) if max_score > 0 else 0
+    pass_score = quiz.get("settings", {}).get("pass_score", 70)
     passed = score_percentage >= pass_score
     
-    # Soumettre la tentative
-    QuizAttemptModel.submit_attempt(attempt_id, evaluated_answers, time_spent)
+    # 8. Calculer le temps total passé
+    total_time_spent = sum(a.get("time_spent_seconds", 0) for a in answers)
     
-    # Mettre à jour le score et le statut
-    QuizAttemptModel.update_attempt(attempt_id, {
+    # 9. Mettre à jour la tentative dans la base de données
+    submitted_at = datetime.utcnow()
+    
+    update_data = {
+        "status": "completed",
+        "submitted_at": submitted_at,
+        "answers": evaluated_answers,
         "score": round(score_percentage, 2),
-        "passed": passed
-    })
+        "max_score": 100,
+        "pass_score": pass_score,
+        "passed": passed,
+        "time_spent_seconds": total_time_spent,
+        "updated_at": submitted_at
+    }
     
-    # 🎯 AJOUT ICI : Mettre à jour la progression utilisateur
-    update_user_progress_after_quiz(
-        user_id=user_id,
-        quiz_id=str(attempt["quiz_id"]),
-        chapter_id=str(quiz["chapter_id"]),
-        church_id=str(attempt["church_id"]),
-        score_percentage=round(score_percentage, 2),
-        passed=passed
-    )
+    QuizAttemptModel.update_attempt(attempt_id, update_data)
     
-    # Récupérer la tentative mise à jour
-    updated_attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)
+    # 10. Mettre à jour la progression de l'utilisateur
+    from services.user_progress_service import update_user_progress_after_quiz
     
-    return {
+    chapter = ChapterModel.get_chapter_by_id(str(quiz["chapter_id"]))
+    if chapter:
+        update_user_progress_after_quiz(
+            user_id=user_id,
+            quiz_id=str(quiz["_id"]),
+            chapter_id=str(quiz["chapter_id"]),
+            church_id=str(attempt["church_id"]),
+            score_percentage=score_percentage,
+            passed=passed
+        )
+    
+    # 11. Construire la réponse
+    result = {
         "message": "Tentative soumise avec succès",
-        "data": updated_attempt,
+        "data": {
+            "_id": str(attempt["_id"]),
+            "quiz_id": str(quiz["_id"]),
+            "status": "completed",
+            "score": round(score_percentage, 2),
+            "passed": passed,
+            "time_spent_seconds": total_time_spent,
+            "submitted_at": submitted_at,
+            "answers": evaluated_answers
+        },
         "result": {
             "score": round(score_percentage, 2),
             "max_score": 100,
-            "points_earned": total_score,
-            "points_possible": max_score,
+            "points_earned": total_points_earned,
+            "points_possible": total_points_possible,
             "passed": passed,
             "pass_score": pass_score
         }
-    }, 200
+    }
+    
+    return result, 200
+
+
+
+
+
+
+# 🎯 Fonctions d'évaluation par type de question
+
+def evaluate_mcq_single(answer, question):
+    """
+    Évalue une question à choix unique (MCQ Single).
+    """
+    selected_options = answer.get("selected_options", [])
+    
+    if not selected_options:
+        return {"is_correct": False, "points_earned": 0}
+    
+    selected_option_id = str(selected_options[0])
+    
+    # Trouver l'option sélectionnée
+    for option in question.get("options", []):
+        if str(option.get("_id", "")) == selected_option_id:
+            if option.get("is_correct", False):
+                return {
+                    "is_correct": True,
+                    "points_earned": question.get("points", 0)
+                }
+            else:
+                return {"is_correct": False, "points_earned": 0}
+    
+    return {"is_correct": False, "points_earned": 0}
+
+
+def evaluate_mcq_multiple(answer, question):
+    """
+    Évalue une question à choix multiples (MCQ Multiple).
+    Points partiels possibles.
+    """
+    selected_options = [str(opt) for opt in answer.get("selected_options", [])]
+    
+    if not selected_options:
+        return {"is_correct": False, "points_earned": 0}
+    
+    points_earned = 0
+    total_correct_options = 0
+    correct_selections = 0
+    incorrect_selections = 0
+    
+    for option in question.get("options", []):
+        option_id = str(option.get("_id", ""))
+        is_correct = option.get("is_correct", False)
+        is_selected = option_id in selected_options
+        
+        if is_correct:
+            total_correct_options += 1
+            if is_selected:
+                correct_selections += 1
+                # Ajouter les points de l'option
+                points_earned += option.get("points", 0)
+        else:
+            if is_selected:
+                incorrect_selections += 1
+    
+    # Si l'utilisateur a sélectionné des options incorrectes, réduire le score
+    if incorrect_selections > 0:
+        points_earned = max(0, points_earned - incorrect_selections)
+    
+    # Vérifier si tout est correct
+    is_correct = (correct_selections == total_correct_options and incorrect_selections == 0)
+    
+    return {
+        "is_correct": is_correct,
+        "points_earned": points_earned
+    }
+
+
+def evaluate_true_false(answer, question):
+    """
+    Évalue une question Vrai/Faux (True/False).
+    """
+    selected_options = answer.get("selected_options", [])
+    
+    if not selected_options:
+        return {"is_correct": False, "points_earned": 0}
+    
+    selected_option_id = str(selected_options[0])
+    
+    # Trouver l'option sélectionnée
+    for option in question.get("options", []):
+        if str(option.get("_id", "")) == selected_option_id:
+            if option.get("is_correct", False):
+                return {
+                    "is_correct": True,
+                    "points_earned": question.get("points", 0)
+                }
+            else:
+                return {"is_correct": False, "points_earned": 0}
+    
+    return {"is_correct": False, "points_earned": 0}
+
+
+def evaluate_fill_blank(answer, question):
+    """
+    Évalue une question à trous (Fill in the Blank).
+    """
+    user_answers = answer.get("fill_blank_answers", [])
+    correct_answers = question.get("correct_answers", [])
+    case_sensitive = question.get("case_sensitive", False)
+    
+    if len(user_answers) != len(correct_answers):
+        return {"is_correct": False, "points_earned": 0}
+    
+    all_correct = True
+    
+    for user_ans, correct_ans in zip(user_answers, correct_answers):
+        if case_sensitive:
+            if user_ans != correct_ans:
+                all_correct = False
+                break
+        else:
+            if user_ans.lower().strip() != correct_ans.lower().strip():
+                all_correct = False
+                break
+    
+    if all_correct:
+        return {
+            "is_correct": True,
+            "points_earned": question.get("points", 0)
+        }
+    else:
+        return {"is_correct": False, "points_earned": 0}
+
+
+def evaluate_free_text(answer, question):
+    """
+    Évalue une question à réponse libre (Free Text).
+    Vérifie si la réponse contient des mots-clés attendus.
+    """
+    user_answer = answer.get("free_text_answer", "")
+    expected_answers = question.get("free_text_answers", [])
+    case_sensitive = question.get("case_sensitive", False)
+    
+    if not user_answer:
+        return {"is_correct": False, "points_earned": 0}
+    
+    if not case_sensitive:
+        user_answer = user_answer.lower()
+        expected_answers = [ans.lower() for ans in expected_answers]
+    
+    # Vérifier si la réponse utilisateur contient au moins une des réponses attendues
+    for expected in expected_answers:
+        if expected in user_answer:
+            return {
+                "is_correct": True,
+                "points_earned": question.get("points", 0)
+            }
+    
+    # Points partiels si plusieurs mots-clés sont trouvés
+    keywords_found = sum(1 for exp in expected_answers if exp in user_answer)
+    
+    if keywords_found > 0:
+        partial_points = (keywords_found / len(expected_answers)) * question.get("points", 0)
+        return {
+            "is_correct": False,
+            "points_earned": int(partial_points)
+        }
+    
+    return {"is_correct": False, "points_earned": 0}
+
+
+
 
 
 def evaluate_mcq_answer(question, selected_options):
