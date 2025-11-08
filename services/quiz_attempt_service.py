@@ -64,12 +64,16 @@ def start_quiz_attempt_service(quiz_id, user_id, church_id):
     
     return result, 201
 
+# services/quiz_attempt_service.py
 
 def submit_quiz_attempt_service(attempt_id, answers, user_id):
     """
     Soumet une tentative de quiz et calcule le score.
+    Si la tentative a déjà été soumise, remplace les réponses et recalcule le score.
     Gère tous les types de questions : mcq_single, mcq_multiple, true_false, fill_blank, free_text
     """
+    
+    
     # 1. Récupérer la tentative
     attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)
     
@@ -80,9 +84,11 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
     if str(attempt["user_id"]) != str(user_id):
         return {"message": "Accès non autorisé à cette tentative"}, 403
     
-    # 3. Vérifier que la tentative n'est pas déjà soumise
-    if attempt.get("status") == "completed":
-        return {"message": "Cette tentative a déjà été soumise"}, 400
+    # 3. 🎯 Vérifier si la tentative a déjà été soumise
+    was_already_submitted = attempt.get("status") == "completed"
+    
+    if was_already_submitted:
+        print(f"[INFO] Tentative {attempt_id} déjà soumise - Remplacement des réponses")
     
     # 4. Récupérer le quiz complet
     quiz = QuizModel.get_quiz_by_id(str(attempt["quiz_id"]))
@@ -90,13 +96,27 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
     if not quiz:
         return {"message": "Quiz non trouvé"}, 404
     
-    # 5. Créer un map des questions par ID
+    # 5. Vérifier le nombre maximum de tentatives
+    max_attempts = quiz.get("settings", {}).get("max_attempts", 0)
+    
+    if max_attempts > 0 and was_already_submitted:
+        # Compter le nombre de tentatives déjà effectuées
+        attempt_number = attempt.get("attempt_number", 1)
+        
+        if attempt_number >= max_attempts:
+            return {
+                "message": f"Nombre maximum de tentatives atteint ({max_attempts})",
+                "max_attempts": max_attempts,
+                "current_attempt": attempt_number
+            }, 400
+    
+    # 6. Créer un map des questions par ID
     questions_map = {}
     for question in quiz.get("questions", []):
         question_id = str(question.get("_id", ""))
         questions_map[question_id] = question
     
-    # 6. Évaluer chaque réponse
+    # 7. Évaluer chaque réponse
     evaluated_answers = []
     total_points_earned = 0
     total_points_possible = 0
@@ -146,7 +166,7 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
         
         evaluated_answers.append(evaluated_answer)
     
-    # 7. Calculer le score en pourcentage
+    # 8. Calculer le score en pourcentage
     if total_points_possible > 0:
         score_percentage = (total_points_earned / total_points_possible) * 100
     else:
@@ -155,10 +175,10 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
     pass_score = quiz.get("settings", {}).get("pass_score", 70)
     passed = score_percentage >= pass_score
     
-    # 8. Calculer le temps total passé
+    # 9. Calculer le temps total passé
     total_time_spent = sum(a.get("time_spent_seconds", 0) for a in answers)
     
-    # 9. Mettre à jour la tentative dans la base de données
+    # 10. 🎯 Mettre à jour la tentative dans la base de données
     submitted_at = datetime.utcnow()
     
     update_data = {
@@ -173,9 +193,15 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
         "updated_at": submitted_at
     }
     
+    # 🎯 Si c'était déjà soumis, incrémenter le numéro de tentative
+    if was_already_submitted:
+        current_attempt_number = attempt.get("attempt_number", 1)
+        update_data["attempt_number"] = current_attempt_number + 1
+    
     QuizAttemptModel.update_attempt(attempt_id, update_data)
     
-    # 10. Mettre à jour la progression de l'utilisateur
+    # 11. 🎯 Mettre à jour la progression de l'utilisateur
+    # Toujours mettre à jour, même si c'est une re-soumission
     from services.user_progress_service import update_user_progress_after_quiz
     
     chapter = ChapterModel.get_chapter_by_id(str(quiz["chapter_id"]))
@@ -189,9 +215,9 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
             passed=passed
         )
     
-    # 11. Construire la réponse
+    # 12. Construire la réponse
     result = {
-        "message": "Tentative soumise avec succès",
+        "message": "Tentative soumise avec succès" if not was_already_submitted else "Tentative mise à jour avec succès",
         "data": {
             "_id": str(attempt["_id"]),
             "quiz_id": str(quiz["_id"]),
@@ -200,7 +226,9 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
             "passed": passed,
             "time_spent_seconds": total_time_spent,
             "submitted_at": submitted_at,
-            "answers": evaluated_answers
+            "attempt_number": update_data.get("attempt_number", attempt.get("attempt_number", 1)),
+            "answers": evaluated_answers,
+            "is_resubmission": was_already_submitted
         },
         "result": {
             "score": round(score_percentage, 2),
@@ -215,12 +243,7 @@ def submit_quiz_attempt_service(attempt_id, answers, user_id):
     return result, 200
 
 
-
-
-
-
-# 🎯 Fonctions d'évaluation par type de question
-
+# Les fonctions d'évaluation restent les mêmes
 def evaluate_mcq_single(answer, question):
     """
     Évalue une question à choix unique (MCQ Single).
@@ -232,7 +255,6 @@ def evaluate_mcq_single(answer, question):
     
     selected_option_id = str(selected_options[0])
     
-    # Trouver l'option sélectionnée
     for option in question.get("options", []):
         if str(option.get("_id", "")) == selected_option_id:
             if option.get("is_correct", False):
@@ -249,7 +271,6 @@ def evaluate_mcq_single(answer, question):
 def evaluate_mcq_multiple(answer, question):
     """
     Évalue une question à choix multiples (MCQ Multiple).
-    Points partiels possibles.
     """
     selected_options = [str(opt) for opt in answer.get("selected_options", [])]
     
@@ -270,17 +291,14 @@ def evaluate_mcq_multiple(answer, question):
             total_correct_options += 1
             if is_selected:
                 correct_selections += 1
-                # Ajouter les points de l'option
                 points_earned += option.get("points", 0)
         else:
             if is_selected:
                 incorrect_selections += 1
     
-    # Si l'utilisateur a sélectionné des options incorrectes, réduire le score
     if incorrect_selections > 0:
         points_earned = max(0, points_earned - incorrect_selections)
     
-    # Vérifier si tout est correct
     is_correct = (correct_selections == total_correct_options and incorrect_selections == 0)
     
     return {
@@ -300,7 +318,6 @@ def evaluate_true_false(answer, question):
     
     selected_option_id = str(selected_options[0])
     
-    # Trouver l'option sélectionnée
     for option in question.get("options", []):
         if str(option.get("_id", "")) == selected_option_id:
             if option.get("is_correct", False):
@@ -349,7 +366,6 @@ def evaluate_fill_blank(answer, question):
 def evaluate_free_text(answer, question):
     """
     Évalue une question à réponse libre (Free Text).
-    Vérifie si la réponse contient des mots-clés attendus.
     """
     user_answer = answer.get("free_text_answer", "")
     expected_answers = question.get("free_text_answers", [])
@@ -362,7 +378,6 @@ def evaluate_free_text(answer, question):
         user_answer = user_answer.lower()
         expected_answers = [ans.lower() for ans in expected_answers]
     
-    # Vérifier si la réponse utilisateur contient au moins une des réponses attendues
     for expected in expected_answers:
         if expected in user_answer:
             return {
@@ -370,7 +385,6 @@ def evaluate_free_text(answer, question):
                 "points_earned": question.get("points", 0)
             }
     
-    # Points partiels si plusieurs mots-clés sont trouvés
     keywords_found = sum(1 for exp in expected_answers if exp in user_answer)
     
     if keywords_found > 0:
@@ -381,8 +395,6 @@ def evaluate_free_text(answer, question):
         }
     
     return {"is_correct": False, "points_earned": 0}
-
-
 
 
 
