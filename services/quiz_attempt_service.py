@@ -311,3 +311,125 @@ def abandon_attempt_service(attempt_id, user_id):
     QuizAttemptModel.abandon_attempt(attempt_id)
     
     return {"message": "Tentative abandonnée"}, 200
+
+# services/quiz_attempt_service.py
+
+def get_attempt_with_questions_service(attempt_id, user_id):
+    """
+    Récupère une tentative avec toutes les questions et réponses du quiz.
+    """
+ 
+    # 1. Récupérer la tentative
+    attempt = QuizAttemptModel.get_attempt_by_id(attempt_id)
+    
+    if not attempt:
+        return {"message": "Tentative non trouvée"}, 404
+    
+    # 2. Vérifier que la tentative appartient à l'utilisateur
+    if str(attempt["user_id"]) != str(user_id):
+        return {"message": "Accès non autorisé à cette tentative"}, 403
+    
+    # 3. Récupérer le quiz complet
+    quiz = QuizModel.get_quiz_by_id(str(attempt["quiz_id"]))
+    
+    if not quiz:
+        return {"message": "Quiz non trouvé"}, 404
+    
+    # 4. Créer un map des réponses de l'utilisateur
+    user_answers_map = {}
+    for answer in attempt.get("answers", []):
+        question_id = str(answer["question_id"])
+        user_answers_map[question_id] = answer
+    
+    # 5. Enrichir chaque question avec la réponse de l'utilisateur
+    enriched_questions = []
+    
+    for question in quiz.get("questions", []):
+        question_id = str(question.get("_id", ""))
+        user_answer = user_answers_map.get(question_id)
+        
+        # Structure de base de la question
+        enriched_question = {
+            "question_id": question_id,
+            "order": question.get("order"),
+            "type": question.get("type"),
+            "question_text": question.get("question_text"),
+            "points_possible": question.get("points", 0),
+            "explanation": question.get("explanation"),
+            "media": question.get("media")
+        }
+        
+        # 🎯 Ajouter les options pour MCQ et True/False
+        if question.get("type") in ["mcq_single", "mcq_multiple", "true_false"]:
+            options = []
+            selected_option_ids = []
+            
+            if user_answer:
+                selected_option_ids = [
+                    str(opt_id) for opt_id in user_answer.get("selected_options", [])
+                ]
+            
+            for option in question.get("options", []):
+                option_id = str(option.get("_id", ""))
+                options.append({
+                    "option_id": option_id,
+                    "text": option.get("text"),
+                    "is_correct": option.get("is_correct", False),
+                    "is_selected": option_id in selected_option_ids,
+                    "points": option.get("points", 0)  # Pour mcq_multiple
+                })
+            
+            enriched_question["options"] = options
+        
+        # 🎯 Ajouter fill_blank_text pour fill_blank
+        if question.get("type") == "fill_blank":
+            enriched_question["fill_blank_text"] = question.get("fill_blank_text")
+            enriched_question["correct_answers"] = question.get("correct_answers", [])
+            enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+        
+        # 🎯 Ajouter free_text_answers pour free_text
+        if question.get("type") == "free_text":
+            enriched_question["expected_answers"] = question.get("free_text_answers", [])
+            enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+        
+        # 🎯 Ajouter la réponse de l'utilisateur
+        if user_answer:
+            user_answer_data = {
+                "selected_options": user_answer.get("selected_options", []),
+                "text_answer": user_answer.get("text_answer"),
+                "fill_blank_answers": user_answer.get("fill_blank_answers", [])
+            }
+            
+            enriched_question["user_answer"] = user_answer_data
+            enriched_question["is_correct"] = user_answer.get("is_correct", False)
+            enriched_question["points_earned"] = user_answer.get("points_earned", 0)
+        else:
+            # Question non répondue
+            enriched_question["user_answer"] = None
+            enriched_question["is_correct"] = False
+            enriched_question["points_earned"] = 0
+        
+        enriched_questions.append(enriched_question)
+    
+    # 6. Construire la réponse finale
+    result = {
+        "_id": str(attempt["_id"]),
+        "quiz_id": str(attempt["quiz_id"]),
+        "quiz_title": quiz.get("title"),
+        "quiz_description": quiz.get("description"),
+        "user_id": str(attempt["user_id"]),
+        "church_id": str(attempt["church_id"]),
+        "attempt_number": attempt.get("attempt_number"),
+        "status": attempt.get("status"),
+        "started_at": attempt.get("started_at"),
+        "submitted_at": attempt.get("submitted_at"),
+        "time_spent_seconds": attempt.get("time_spent_seconds", 0),
+        "score": round(attempt.get("score", 0), 2),
+        "max_score": attempt.get("max_score", 0),
+        "pass_score": attempt.get("pass_score", 70),
+        "passed": attempt.get("passed", False),
+        "questions": enriched_questions,
+        "created_at": attempt.get("created_at")
+    }
+    
+    return result, 200

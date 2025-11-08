@@ -9,6 +9,7 @@ from schemas.quiz_attempt_schema import (
     UpdateAnswerSchema
 )
 from services.quiz_attempt_service import (
+    get_attempt_with_questions_service,
     start_quiz_attempt_service,
     submit_quiz_attempt_service,
     get_user_attempts_service,
@@ -411,7 +412,7 @@ def get_my_attempts():
 @jwt_required()
 def get_attempt(attempt_id):
     """
-    Récupérer une tentative spécifique par son ID
+    Récupérer une tentative spécifique avec les questions et réponses
     ---
     tags:
       - Quiz Attempts
@@ -447,6 +448,9 @@ def get_attempt(attempt_id):
                 quiz_id:
                   type: string
                   example: "507f1f77bcf86cd799439030"
+                quiz_title:
+                  type: string
+                  example: "Test de connaissance - La Foi"
                 user_id:
                   type: string
                   example: "507f1f77bcf86cd799439013"
@@ -481,26 +485,74 @@ def get_attempt(attempt_id):
                 passed:
                   type: boolean
                   example: true
-                answers:
+                questions:
                   type: array
-                  description: Réponses détaillées avec correction
+                  description: Questions du quiz avec réponses de l'utilisateur
                   items:
                     type: object
                     properties:
                       question_id:
                         type: string
-                      question_type:
-                        type: string
-                      selected_options:
-                        type: array
-                        items:
-                          type: string
-                      is_correct:
-                        type: boolean
-                      points_earned:
+                        example: "q1"
+                      order:
                         type: integer
+                        example: 1
+                      type:
+                        type: string
+                        enum: [mcq_single, mcq_multiple, true_false, fill_blank, free_text]
+                        example: "mcq_single"
+                      question_text:
+                        type: string
+                        example: "Qu'est-ce que la foi selon Hébreux 11:1?"
                       points_possible:
                         type: integer
+                        example: 10
+                      options:
+                        type: array
+                        description: Options pour MCQ et True/False
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            is_correct:
+                              type: boolean
+                            is_selected:
+                              type: boolean
+                              description: Option sélectionnée par l'utilisateur
+                      user_answer:
+                        type: object
+                        description: Réponse de l'utilisateur
+                        properties:
+                          selected_options:
+                            type: array
+                            items:
+                              type: string
+                            description: IDs des options sélectionnées
+                          text_answer:
+                            type: string
+                            description: Réponse textuelle (fill_blank, free_text)
+                          fill_blank_answers:
+                            type: array
+                            items:
+                              type: string
+                            description: Réponses pour fill_blank
+                      is_correct:
+                        type: boolean
+                        example: true
+                      points_earned:
+                        type: number
+                        example: 10
+                      explanation:
+                        type: string
+                        example: "Hébreux 11:1 définit la foi comme..."
+                      media:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                          url:
+                            type: string
                 created_at:
                   type: string
                   format: date-time
@@ -516,7 +568,7 @@ def get_attempt(attempt_id):
     try:
         current_user_id = get_jwt_identity()
         
-        result, status = get_attempt_by_id_service(attempt_id, current_user_id)
+        result, status = get_attempt_with_questions_service(attempt_id, current_user_id)
         
         if status != 200:
             return jsonify(result), status
@@ -528,6 +580,127 @@ def get_attempt(attempt_id):
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+# @quiz_attempts_bp.route("/<attempt_id>", methods=["GET"])
+# @jwt_required()
+# def get_attempt(attempt_id):
+#     """
+#     Récupérer une tentative spécifique par son ID
+#     ---
+#     tags:
+#       - Quiz Attempts
+#     parameters:
+#       - in: header
+#         name: Authorization
+#         required: true
+#         schema:
+#           type: string
+#         description: Token JWT de l'utilisateur
+#         example: "Bearer votre.jwt.token"
+#       - in: path
+#         name: attempt_id
+#         type: string
+#         required: true
+#         description: ID de la tentative
+#         example: "507f1f77bcf86cd799439040"
+#     responses:
+#       200:
+#         description: Tentative récupérée avec succès
+#         schema:
+#           type: object
+#           properties:
+#             message:
+#               type: string
+#               example: "Tentative récupérée avec succès"
+#             data:
+#               type: object
+#               properties:
+#                 _id:
+#                   type: string
+#                   example: "507f1f77bcf86cd799439040"
+#                 quiz_id:
+#                   type: string
+#                   example: "507f1f77bcf86cd799439030"
+#                 user_id:
+#                   type: string
+#                   example: "507f1f77bcf86cd799439013"
+#                 church_id:
+#                   type: string
+#                   example: "507f1f77bcf86cd799439012"
+#                 attempt_number:
+#                   type: integer
+#                   example: 1
+#                 status:
+#                   type: string
+#                   enum: [in_progress, completed, abandoned]
+#                   example: "completed"
+#                 started_at:
+#                   type: string
+#                   format: date-time
+#                 submitted_at:
+#                   type: string
+#                   format: date-time
+#                 time_spent_seconds:
+#                   type: integer
+#                   example: 1800
+#                 score:
+#                   type: number
+#                   example: 85.5
+#                 max_score:
+#                   type: integer
+#                   example: 100
+#                 pass_score:
+#                   type: integer
+#                   example: 70
+#                 passed:
+#                   type: boolean
+#                   example: true
+#                 answers:
+#                   type: array
+#                   description: Réponses détaillées avec correction
+#                   items:
+#                     type: object
+#                     properties:
+#                       question_id:
+#                         type: string
+#                       question_type:
+#                         type: string
+#                       selected_options:
+#                         type: array
+#                         items:
+#                           type: string
+#                       is_correct:
+#                         type: boolean
+#                       points_earned:
+#                         type: integer
+#                       points_possible:
+#                         type: integer
+#                 created_at:
+#                   type: string
+#                   format: date-time
+#       401:
+#         description: Token JWT manquant ou invalide
+#       403:
+#         description: Accès non autorisé à cette tentative
+#       404:
+#         description: Tentative non trouvée
+#       500:
+#         description: Erreur serveur
+#     """
+#     try:
+#         current_user_id = get_jwt_identity()
+        
+#         result, status = get_attempt_by_id_service(attempt_id, current_user_id)
+        
+#         if status != 200:
+#             return jsonify(result), status
+        
+#         return jsonify({
+#             "message": "Tentative récupérée avec succès",
+#             "data": result
+#         }), 200
+        
+#     except Exception as e:
+#         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
 
 @quiz_attempts_bp.route("/<attempt_id>/abandon", methods=["POST"])
