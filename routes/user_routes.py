@@ -625,7 +625,7 @@ def reset_password(user_id):
 
 UPLOAD_FOLDER = '/mnt/user-data/uploads/videos'
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+# MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
