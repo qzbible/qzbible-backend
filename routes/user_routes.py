@@ -1,3 +1,4 @@
+import uuid
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils.decorators import admin_required, staff_required
@@ -619,4 +620,104 @@ def reset_password(user_id):
     """
     data = request.get_json()
     return reset_password_service(user_id, data)
+
+
+
+UPLOAD_FOLDER = '/mnt/user-data/uploads/videos'
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@user_bp.route("/video", methods=["POST"])
+@jwt_required()
+def upload_video():
+    """
+    Upload une vidéo et retourne le lien
+    ---
+    tags:
+      - Uploads
+    consumes:
+      - multipart/form-data
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: formData
+        name: video
+        type: file
+        required: true
+        description: Fichier vidéo à uploader (mp4, avi, mov, mkv, webm - max 100MB)
+    responses:
+      200:
+        description: Vidéo uploadée avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Vidéo uploadée avec succès"
+            video_url:
+              type: string
+              example: "https://votre-domaine.com/uploads/videos/abc123.mp4"
+            filename:
+              type: string
+              example: "abc123.mp4"
+      400:
+        description: Aucun fichier fourni ou format non autorisé
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Format de fichier non autorisé"
+      401:
+        description: Token JWT manquant ou invalide
+      500:
+        description: Erreur serveur
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Erreur : ..."
+    """
+    try:
+        if 'video' not in request.files:
+            return jsonify({"message": "Aucun fichier fourni"}), 400
+        
+        file = request.files['video']
+        
+        if file.filename == '':
+            return jsonify({"message": "Nom de fichier vide"}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({"message": "Format de fichier non autorisé"}), 400
+        
+        # Générer un nom unique
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{uuid.uuid4()}.{ext}"
+        
+        # Créer le dossier si nécessaire
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
+        # Sauvegarder le fichier
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+        
+        # Retourner le lien
+        video_url = f"https://dev-backend.qzbible.com/uploads/videos/{filename}"
+        
+        return jsonify({
+            "message": "Vidéo uploadée avec succès",
+            "video_url": video_url,
+            "filename": filename
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur : {str(e)}"}), 500
 
