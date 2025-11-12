@@ -1,6 +1,7 @@
 # services/quiz_service.py
 
 from bson import ObjectId
+from models.quiz_attempt_model import QuizAttemptModel
 from models.quiz_model import QuizModel
 from models.chapter_model import ChapterModel
 from models.user_model import UserModel
@@ -53,6 +54,7 @@ def get_all_quizzes_service(chapter_id):
                     option["_id"] = str(option["_id"])
     
     return quizzes
+
 
 
 def get_quiz_by_id_service(quiz_id, include_answers=False):
@@ -190,3 +192,27 @@ def clone_quiz_service(quiz_id, new_chapter_id, new_church_id, cloned_by):
         "message": "Quiz cloné avec succès",
         "quiz_id": result["quiz_id"]
     }, 201
+
+
+def get_quizzes_with_last_attempt(chapter_id, user_id):
+    """
+    Récupère tous les quiz d'un chapitre et pour chaque quiz,
+    récupère la dernière tentative d'un utilisateur.
+    
+    :param chapter_id: str ou ObjectId du chapitre
+    :param user_id: str ou ObjectId de l'utilisateur
+    :return: liste de dict contenant quiz et dernière tentative
+    """
+    quizzes = get_all_quizzes_service(chapter_id)
+    
+    result = []
+    for quiz in quizzes:
+        quiz_id = quiz["_id"]
+        last_attempt = QuizAttemptModel.get_last_attempt(user_id, quiz_id)
+        
+        result.append({
+            "quiz": quiz,
+            "last_attempt": last_attempt
+        })
+    
+    return result

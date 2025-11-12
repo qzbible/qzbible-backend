@@ -17,6 +17,7 @@ from services.quiz_attempt_service import (
     abandon_attempt_service
 )
 from models.quiz_attempt_model import QuizAttemptModel
+from services.quiz_service import get_quizzes_with_last_attempt
 
 quiz_attempts_bp = Blueprint("quiz_attempts", __name__, url_prefix="/api/quiz-attempts")
 
@@ -960,5 +961,72 @@ def get_user_stats():
             }
         }), 200
         
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
+ 
+@quiz_attempts_bp.route("/chapter/<chapter_id>/last-attempts", methods=["GET"])
+@jwt_required()
+def get_quizzes_last_attempts(chapter_id):
+    """
+    Récupère tous les quiz d'un chapitre et pour chaque quiz,
+    la dernière tentative de l'utilisateur connecté.
+    ---
+    tags:
+      - Quizzes
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: path
+        name: chapter_id
+        type: string
+        required: true
+        description: ID du chapitre
+        example: "507f1f77bcf86cd799439011"
+    responses:
+      200:
+        description: Liste des quiz avec la dernière tentative
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Quiz récupérés avec succès"
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  quiz:
+                    type: object
+                    description: Quiz sans réponses correctes (mode apprenant)
+                  last_attempt:
+                    type: object
+                    description: Dernière tentative de l'utilisateur pour ce quiz
+      401:
+        description: Token JWT manquant ou invalide
+      404:
+        description: Chapitre ou quiz non trouvé
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        
+        quizzes_with_attempts = get_quizzes_with_last_attempt(chapter_id, current_user_id)
+        
+        if not quizzes_with_attempts:
+            return jsonify({"message": "Aucun quiz trouvé pour ce chapitre"}), 404
+        
+        return jsonify({
+            "message": "Quiz récupérés avec succès",
+            "data": quizzes_with_attempts
+        }), 200
+    
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500

@@ -236,3 +236,36 @@ class QuizAttemptModel:
         
         result = list(QuizAttemptModel.get_collection().aggregate(pipeline))
         return result[0] if result else None
+    
+    @staticmethod
+    def get_last_attempt(user_id, quiz_id):
+        """
+        Récupère la dernière tentative d'un utilisateur pour un quiz donné.
+        
+        :param user_id: str ou ObjectId de l'utilisateur
+        :param quiz_id: str ou ObjectId du quiz
+        :return: dict de la dernière tentative ou None
+        """
+        query = {
+            "user_id": ObjectId(user_id),
+            "quiz_id": ObjectId(quiz_id)
+        }
+        
+        attempt = QuizAttemptModel.get_collection().find_one(
+            query,
+            sort=[("created_at", -1)]
+        )
+        
+        if attempt:
+            attempt["_id"] = str(attempt["_id"])
+            attempt["quiz_id"] = str(attempt["quiz_id"])
+            attempt["user_id"] = str(attempt["user_id"])
+            attempt["church_id"] = str(attempt["church_id"])
+            
+            # Convertir les ObjectId dans les réponses
+            for answer in attempt.get("answers", []):
+                answer["question"] = QuizModel.get_question_by_id(str(attempt["quiz_id"]), str(answer["question_id"]))
+                if "selected_options" in answer:
+                    answer["selected_options"] = [str(opt_id) for opt_id in answer["selected_options"]]
+        
+        return attempt
