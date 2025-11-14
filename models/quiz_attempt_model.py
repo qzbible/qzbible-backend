@@ -246,12 +246,15 @@ class QuizAttemptModel:
         :param quiz_id: str ou ObjectId du quiz
         :return: dict de la dernière tentative ou None
         """
+        from bson import ObjectId
+        from extensions import mongo
+        
         query = {
             "user_id": ObjectId(user_id),
             "quiz_id": ObjectId(quiz_id)
         }
         
-        attempt = QuizAttemptModel.get_collection().find_one(
+        attempt = mongo.db.quiz_attempts.find_one(
             query,
             sort=[("created_at", -1)]
         )
@@ -263,9 +266,11 @@ class QuizAttemptModel:
             attempt["church_id"] = str(attempt["church_id"])
             
             # Convertir les ObjectId dans les réponses
-            for answer in attempt.get("answers", []):
-                answer["question"] = QuizModel.get_question_by_id(str(attempt["quiz_id"]), str(answer["question_id"]))
-                if "selected_options" in answer:
-                    answer["selected_options"] = [str(opt_id) for opt_id in answer["selected_options"]]
+            if "answers" in attempt:
+                for answer in attempt["answers"]:
+                    if "selected_options" in answer:
+                        answer["selected_options"] = [
+                            str(opt_id) for opt_id in answer["selected_options"]
+                        ]
         
         return attempt

@@ -196,23 +196,139 @@ def clone_quiz_service(quiz_id, new_chapter_id, new_church_id, cloned_by):
 
 def get_quizzes_with_last_attempt(chapter_id, user_id):
     """
-    Récupère tous les quiz d'un chapitre et pour chaque quiz,
-    récupère la dernière tentative d'un utilisateur.
+    Récupère tous les quiz d'un chapitre avec la dernière tentative de l'utilisateur.
+    Pour chaque quiz, retourne :
+    - Les informations du quiz
+    - Le score obtenu par l'utilisateur
+    - Toutes les questions avec les réponses de l'utilisateur
     
     :param chapter_id: str ou ObjectId du chapitre
     :param user_id: str ou ObjectId de l'utilisateur
-    :return: liste de dict contenant quiz et dernière tentative
+    :return: liste de dict contenant quiz, score et questions avec réponses
     """
-    quizzes = get_all_quizzes_service(chapter_id)
+   
+    
+    # 1. Récupérer tous les quiz du chapitre
+    quizzes = QuizModel.get_all_quizzes_by_chapter(chapter_id)
     
     result = []
+    
     for quiz in quizzes:
-        quiz_id = quiz["_id"]
+        quiz_id = str(quiz["_id"])
+        
+        # 2. Récupérer la dernière tentative pour ce quiz
         last_attempt = QuizAttemptModel.get_last_attempt(user_id, quiz_id)
         
+        # 3. Préparer les données du quiz
+        quiz_data = {
+            "_id": quiz_id,
+            "title": quiz.get("title"),
+            "description": quiz.get("description"),
+            "order": quiz.get("order"),
+            "settings": quiz.get("settings", {})
+        }
+        
+        # 4. Préparer les données de la tentative
+        attempt_data = None
+        questions_with_answers = []
+        
+        if last_attempt:
+            # Créer un map des réponses par question_id
+            answers_map = {}
+            for answer in last_attempt.get("answers", []):
+                question_id = str(answer["question_id"])
+                answers_map[question_id] = answer
+            
+            # 5. Enrichir chaque question avec la réponse de l'utilisateur
+            for question in quiz.get("questions", []):
+                question_id = str(question.get("_id", ""))
+                user_answer = answers_map.get(question_id)
+                
+                # Structure de base
+                enriched_question = {
+                    "question_id": question_id,
+                    "order": question.get("order"),
+                    "type": question.get("type"),
+                    "question_text": question.get("question_text"),
+                    "points_possible": question.get("points", 0),
+                    "explanation": question.get("explanation"),
+                    "media": question.get("media")
+                }
+                
+                # Ajouter les options pour MCQ et True/False
+                if question.get("type") in ["mcq_single", "mcq_multiple", "true_false"]:
+                    options = []
+                    selected_option_ids = []
+                    
+                    if user_answer:
+                        selected_option_ids = [
+                            str(opt_id) for opt_id in user_answer.get("selected_options", [])
+                        ]
+                    
+                    for option in question.get("options", []):
+                        option_id = str(option.get("_id", ""))
+                        options.append({
+                            "option_id": option_id,
+                            "text": option.get("text"),
+                            "is_correct": option.get("is_correct", False),
+                            "is_selected": option_id in selected_option_ids,
+                            "points": option.get("points", 0)
+                        })
+                    
+                    enriched_question["options"] = options
+                
+                # Ajouter fill_blank_text pour fill_blank
+                if question.get("type") == "fill_blank":
+                    enriched_question["fill_blank_text"] = question.get("fill_blank_text")
+                    enriched_question["correct_answers"] = question.get("correct_answers", [])
+                    enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+                
+                # Ajouter expected_answers pour free_text
+                if question.get("type") == "free_text":
+                    enriched_question["expected_answers"] = question.get("free_text_answers", [])
+                    enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+                
+                # Ajouter la réponse de l'utilisateur
+                if user_answer:
+                    enriched_question["user_answer"] = {
+                        "selected_options": user_answer.get("selected_options", []),
+                        "text_answer": user_answer.get("text_answer"),
+                        "fill_blank_answers": user_answer.get("fill_blank_answers", [])
+                    }
+                    enriched_question["is_correct"] = user_answer.get("is_correct", False)
+                    enriched_question["points_earned"] = user_answer.get("points_earned", 0)
+                else:
+                    enriched_question["user_answer"] = {
+                        "selected_options": [],
+                        "text_answer": None,
+                        "fill_blank_answers": []
+                    }
+                    enriched_question["is_correct"] = False
+                    enriched_question["points_earned"] = 0
+                
+                questions_with_answers.append(enriched_question)
+            
+            # 6. Données de la tentative
+            attempt_data = {
+                "attempt_id": str(last_attempt["_id"]),
+                "attempt_number": last_attempt.get("attempt_number", 1),
+                "status": last_attempt.get("status"),
+                "score": round(last_attempt.get("score", 0), 2),
+                "max_score": last_attempt.get("max_score", 100),
+                "pass_score": last_attempt.get("pass_score", 70),
+                "passed": last_attempt.get("passed", False),
+                "time_spent_seconds": last_attempt.get("time_spent_seconds", 0),
+                "started_at": last_attempt.get("started_at"),
+                "submitted_at": last_attempt.get("submitted_at"),
+                "created_at": last_attempt.get("created_at")
+            }
+        
+        # 7. Ajouter au résultat
         result.append({
-            "quiz": quiz,
-            "last_attempt": last_attempt
+            "quiz": quiz_data,
+            "last_attempt": attempt_data,
+            "questions": questions_with_answers,
+            "has_attempt": last_attempt is not None
         })
     
     return result

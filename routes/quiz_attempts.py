@@ -1015,6 +1015,7 @@ def get_quizzes_last_attempts(chapter_id):
       500:
         description: Erreur serveur
     """
+    
     try:
         current_user_id = get_jwt_identity()
         
@@ -1030,3 +1031,5 @@ def get_quizzes_last_attempts(chapter_id):
     
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+
+
