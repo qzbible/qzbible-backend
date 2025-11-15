@@ -17,7 +17,7 @@ from services.quiz_attempt_service import (
     abandon_attempt_service
 )
 from models.quiz_attempt_model import QuizAttemptModel
-from services.quiz_service import get_quizzes_with_last_attempt
+from services.quiz_service import get_quiz_last_attempt_service, get_quizzes_with_last_attempt
 
 quiz_attempts_bp = Blueprint("quiz_attempts", __name__, url_prefix="/api/quiz-attempts")
 
@@ -1027,6 +1027,82 @@ def get_quizzes_last_attempts(chapter_id):
         return jsonify({
             "message": "Quiz récupérés avec succès",
             "data": quizzes_with_attempts
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
+
+@quiz_attempts_bp.route("/quiz/<quiz_id>/last-attempt", methods=["GET"])
+@jwt_required()
+def get_quiz_last_attempt(quiz_id):
+    """
+    Récupère la dernière tentative d'un utilisateur pour un quiz spécifique
+    avec toutes les questions et réponses détaillées
+    ---
+    tags:
+      - Quiz Attempts
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: path
+        name: quiz_id
+        type: string
+        required: true
+        description: ID du quiz
+        example: "690abc789def012345678901"
+    responses:
+      200:
+        description: Dernière tentative récupérée avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Dernière tentative récupérée avec succès"
+            data:
+              type: object
+              properties:
+                quiz:
+                  type: object
+                  description: Informations du quiz
+                last_attempt:
+                  type: object
+                  description: Dernière tentative avec scores
+                questions:
+                  type: array
+                  description: Questions avec réponses de l'utilisateur
+                has_attempt:
+                  type: boolean
+                completion_status:
+                  type: string
+                  enum: [not_started, partially_answered, fully_answered]
+                summary:
+                  type: object
+                  description: Résumé de la complétion
+      401:
+        description: Token JWT manquant ou invalide
+      404:
+        description: Quiz non trouvé ou aucune tentative
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        
+        result = get_quiz_last_attempt_service(quiz_id, current_user_id)
+        
+        if not result:
+            return jsonify({"message": "Quiz non trouvé"}), 404
+        
+        return jsonify({
+            "message": "Dernière tentative récupérée avec succès",
+            "data": result
         }), 200
     
     except Exception as e:

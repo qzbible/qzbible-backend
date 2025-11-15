@@ -462,3 +462,264 @@ def get_quizzes_with_last_attempt(chapter_id, user_id):
         })
     
     return result
+
+
+def get_quiz_last_attempt_service(quiz_id, user_id):
+    """
+    Récupère la dernière tentative d'un utilisateur pour un quiz spécifique.
+    
+    :param quiz_id: str ou ObjectId du quiz
+    :param user_id: str ou ObjectId de l'utilisateur
+    :return: dict contenant quiz, dernière tentative, questions avec réponses et statuts
+    """
+    
+    # 1. Récupérer le quiz
+    quiz = QuizModel.get_quiz_by_id(quiz_id)
+    
+    if not quiz:
+        return None
+    
+    total_questions = len(quiz.get("questions", []))
+    
+    # 2. Récupérer la dernière tentative
+    last_attempt = QuizAttemptModel.get_last_attempt(user_id, quiz_id)
+    
+    # 3. Préparer les données du quiz
+    quiz_data = {
+        "_id": str(quiz["_id"]),
+        "chapter_id": str(quiz["chapter_id"]),
+        "title": quiz.get("title"),
+        "description": quiz.get("description"),
+        "order": quiz.get("order"),
+        "settings": quiz.get("settings", {}),
+        "total_questions": total_questions
+    }
+    
+    # 4. Préparer les questions et les réponses
+    attempt_data = None
+    questions_with_answers = []
+    
+    # Compteurs pour le statut de complétion
+    answered_questions = 0
+    unanswered_questions = 0
+    partially_answered_questions = 0
+    
+    if last_attempt:
+        # Créer un map des réponses par question_id
+        answers_map = {}
+        for answer in last_attempt.get("answers", []):
+            question_id = str(answer["question_id"])
+            answers_map[question_id] = answer
+        
+        # 5. Enrichir chaque question avec la réponse de l'utilisateur
+        for question in quiz.get("questions", []):
+            question_id = str(question.get("_id", ""))
+            user_answer = answers_map.get(question_id)
+            question_type = question.get("type")
+            
+            # Structure de base
+            enriched_question = {
+                "question_id": question_id,
+                "order": question.get("order"),
+                "type": question_type,
+                "question_text": question.get("question_text"),
+                "points_possible": question.get("points", 0),
+                "explanation": question.get("explanation"),
+                "media": question.get("media")
+            }
+            
+            # Variable pour déterminer si la question est répondue
+            is_answered = False
+            is_partially_answered = False
+            
+            # Ajouter les options pour MCQ et True/False
+            if question_type in ["mcq_single", "mcq_multiple", "true_false"]:
+                options = []
+                selected_option_ids = []
+                
+                if user_answer:
+                    selected_option_ids = [
+                        str(opt_id) for opt_id in user_answer.get("selected_options", [])
+                    ]
+                
+                for option in question.get("options", []):
+                    option_id = str(option.get("_id", ""))
+                    options.append({
+                        "option_id": option_id,
+                        "text": option.get("text"),
+                        "is_correct": option.get("is_correct", False),
+                        "is_selected": option_id in selected_option_ids,
+                        "points": option.get("points", 0)
+                    })
+                
+                enriched_question["options"] = options
+                
+                # Vérifier si répondu
+                if selected_option_ids:
+                    is_answered = True
+                    
+                    # Pour mcq_multiple, vérifier si partiellement répondu
+                    if question_type == "mcq_multiple":
+                        correct_options = [
+                            str(opt.get("_id")) 
+                            for opt in question.get("options", []) 
+                            if opt.get("is_correct", False)
+                        ]
+                        if len(selected_option_ids) < len(correct_options):
+                            is_partially_answered = True
+            
+            # Ajouter fill_blank_text pour fill_blank
+            if question_type == "fill_blank":
+                enriched_question["fill_blank_text"] = question.get("fill_blank_text")
+                enriched_question["correct_answers"] = question.get("correct_answers", [])
+                enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+                
+                # Vérifier si répondu
+                if user_answer and user_answer.get("fill_blank_answers"):
+                    fill_blank_answers = user_answer.get("fill_blank_answers", [])
+                    required_blanks = len(question.get("correct_answers", []))
+                    
+                    if len(fill_blank_answers) == required_blanks:
+                        if all(ans.strip() for ans in fill_blank_answers):
+                            is_answered = True
+                        else:
+                            is_partially_answered = True
+                    elif len(fill_blank_answers) > 0:
+                        is_partially_answered = True
+            
+            # Ajouter expected_answers pour free_text
+            if question_type == "free_text":
+                enriched_question["expected_answers"] = question.get("free_text_answers", [])
+                enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+                
+                # Vérifier si répondu
+                if user_answer and user_answer.get("text_answer"):
+                    text_answer = user_answer.get("text_answer", "").strip()
+                    if text_answer:
+                        is_answered = True
+            
+            # Ajouter la réponse de l'utilisateur
+            if user_answer:
+                enriched_question["user_answer"] = {
+                    "selected_options": user_answer.get("selected_options", []),
+                    "text_answer": user_answer.get("text_answer"),
+                    "fill_blank_answers": user_answer.get("fill_blank_answers", [])
+                }
+                enriched_question["is_correct"] = user_answer.get("is_correct", False)
+                enriched_question["points_earned"] = user_answer.get("points_earned", 0)
+            else:
+                enriched_question["user_answer"] = {
+                    "selected_options": [],
+                    "text_answer": None,
+                    "fill_blank_answers": []
+                }
+                enriched_question["is_correct"] = False
+                enriched_question["points_earned"] = 0
+            
+            # Déterminer le statut de la question
+            if is_answered:
+                enriched_question["answer_status"] = "answered"
+                answered_questions += 1
+            elif is_partially_answered:
+                enriched_question["answer_status"] = "partially_answered"
+                partially_answered_questions += 1
+            else:
+                enriched_question["answer_status"] = "unanswered"
+                unanswered_questions += 1
+            
+            questions_with_answers.append(enriched_question)
+        
+        # Déterminer le statut de complétion du quiz
+        quiz_completion_status = "not_started"
+        
+        if answered_questions == total_questions:
+            quiz_completion_status = "fully_answered"
+        elif answered_questions > 0 or partially_answered_questions > 0:
+            quiz_completion_status = "partially_answered"
+        
+        # Données de la tentative
+        attempt_data = {
+            "attempt_id": str(last_attempt["_id"]),
+            "attempt_number": last_attempt.get("attempt_number", 1),
+            "status": last_attempt.get("status"),
+            "score": round(last_attempt.get("score", 0), 2),
+            "max_score": last_attempt.get("max_score", 100),
+            "pass_score": last_attempt.get("pass_score", 70),
+            "passed": last_attempt.get("passed", False),
+            "time_spent_seconds": last_attempt.get("time_spent_seconds", 0),
+            "started_at": last_attempt.get("started_at"),
+            "submitted_at": last_attempt.get("submitted_at"),
+            "created_at": last_attempt.get("created_at"),
+            "completion_stats": {
+                "total_questions": total_questions,
+                "answered_questions": answered_questions,
+                "partially_answered_questions": partially_answered_questions,
+                "unanswered_questions": unanswered_questions,
+                "completion_percentage": round((answered_questions / total_questions * 100) if total_questions > 0 else 0, 2)
+            }
+        }
+    else:
+        # Pas de tentative : toutes les questions sont non répondues
+        for question in quiz.get("questions", []):
+            question_id = str(question.get("_id", ""))
+            question_type = question.get("type")
+            
+            enriched_question = {
+                "question_id": question_id,
+                "order": question.get("order"),
+                "type": question_type,
+                "question_text": question.get("question_text"),
+                "points_possible": question.get("points", 0),
+                "explanation": question.get("explanation"),
+                "media": question.get("media"),
+                "user_answer": {
+                    "selected_options": [],
+                    "text_answer": None,
+                    "fill_blank_answers": []
+                },
+                "is_correct": False,
+                "points_earned": 0,
+                "answer_status": "unanswered"
+            }
+            
+            # Ajouter les options pour MCQ et True/False
+            if question_type in ["mcq_single", "mcq_multiple", "true_false"]:
+                options = []
+                for option in question.get("options", []):
+                    options.append({
+                        "option_id": str(option.get("_id", "")),
+                        "text": option.get("text"),
+                        "is_correct": option.get("is_correct", False),
+                        "is_selected": False,
+                        "points": option.get("points", 0)
+                    })
+                enriched_question["options"] = options
+            
+            if question_type == "fill_blank":
+                enriched_question["fill_blank_text"] = question.get("fill_blank_text")
+                enriched_question["correct_answers"] = question.get("correct_answers", [])
+                enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+            
+            if question_type == "free_text":
+                enriched_question["expected_answers"] = question.get("free_text_answers", [])
+                enriched_question["case_sensitive"] = question.get("case_sensitive", False)
+            
+            questions_with_answers.append(enriched_question)
+        
+        quiz_completion_status = "not_started"
+        unanswered_questions = total_questions
+    
+    # Construire la réponse
+    return {
+        "quiz": quiz_data,
+        "last_attempt": attempt_data,
+        "questions": questions_with_answers,
+        "has_attempt": last_attempt is not None,
+        "completion_status": quiz_completion_status,
+        "summary": {
+            "total_questions": total_questions,
+            "answered_questions": answered_questions,
+            "partially_answered_questions": partially_answered_questions,
+            "unanswered_questions": unanswered_questions
+        }
+    }
