@@ -207,11 +207,10 @@ def get_quizzes_with_last_attempt(chapter_id, user_id):
     :param user_id: str ou ObjectId de l'utilisateur
     :return: liste de dict contenant quiz, score, questions avec réponses et statuts
     """
-    from models.quiz_model import QuizModel
-    from models.quiz_attempt_model import QuizAttemptModel
+  
     
     # 1. Récupérer tous les quiz du chapitre
-    quizzes = QuizModel.get_quizzes_by_chapter(chapter_id)
+    quizzes = QuizModel.get_all_quizzes_by_chapter(chapter_id)
     
     result = []
     
