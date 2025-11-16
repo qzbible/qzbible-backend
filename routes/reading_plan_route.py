@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 import os
 from werkzeug.utils import secure_filename
+from datetime import datetime
 
 from schemas.reading_plan_schema import *
 from services.reading_plan_service import *
@@ -18,160 +19,6 @@ documents_bp = Blueprint("documents", __name__, url_prefix="/api/documents")
 def get_reading_plans():
     """
     Récupérer les plans de lecture disponibles
-    ---
-    tags:
-      - Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: query
-        name: category
-        type: string
-        required: false
-        enum: [bible, books, study, mixed]
-        description: Filtrer par catégorie
-        example: "bible"
-      - in: query
-        name: difficulty
-        type: string
-        required: false
-        enum: [beginner, intermediate, advanced]
-        description: Filtrer par niveau de difficulté
-        example: "beginner"
-      - in: query
-        name: creator_type
-        type: string
-        required: false
-        enum: [admin, pastor, user]
-        description: Filtrer par type de créateur
-        example: "admin"
-      - in: query
-        name: duration_range
-        type: string
-        required: false
-        description: Filtrer par durée (format min-max)
-        example: "7-30"
-      - in: query
-        name: tags
-        type: string
-        required: false
-        description: Filtrer par tags (séparés par des virgules)
-        example: "baptême,nouveau-converti"
-      - in: query
-        name: search
-        type: string
-        required: false
-        description: Recherche textuelle
-        example: "formation"
-      - in: query
-        name: sort_by
-        type: string
-        required: false
-        enum: [created_at, popular, rating]
-        default: created_at
-        description: Critère de tri
-        example: "popular"
-      - in: query
-        name: page
-        type: integer
-        required: false
-        default: 1
-        description: Numéro de page
-        example: 1
-      - in: query
-        name: per_page
-        type: integer
-        required: false
-        default: 20
-        description: Nombre d'éléments par page
-        example: 20
-    responses:
-      200:
-        description: Plans de lecture récupérés avec succès
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Plans de lecture récupérés avec succès"
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  _id:
-                    type: string
-                    example: "507f1f77bcf86cd799439060"
-                  title:
-                    type: string
-                    example: "Formation Nouveau Converti"
-                  description:
-                    type: string
-                  category:
-                    type: string
-                    enum: [bible, books, study, mixed]
-                    example: "study"
-                  creator:
-                    type: object
-                    properties:
-                      user_id:
-                        type: string
-                      creator_type:
-                        type: string
-                        enum: [admin, pastor, user]
-                      church_id:
-                        type: string
-                      church_name:
-                        type: string
-                  visibility:
-                    type: string
-                    enum: [public, private, church_only]
-                  duration_days:
-                    type: integer
-                    example: 30
-                  estimated_daily_time:
-                    type: integer
-                    example: 15
-                  difficulty_level:
-                    type: string
-                    enum: [beginner, intermediate, advanced]
-                  tags:
-                    type: array
-                    items:
-                      type: string
-                  stats:
-                    type: object
-                    properties:
-                      subscribers:
-                        type: integer
-                      completions:
-                        type: integer
-                      average_rating:
-                        type: number
-                  created_at:
-                    type: string
-                    format: date-time
-            total:
-              type: integer
-              example: 150
-            page:
-              type: integer
-              example: 1
-            per_page:
-              type: integer
-              example: 20
-            total_pages:
-              type: integer
-              example: 8
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
     """
     try:
         # Préparer les filtres
@@ -225,7 +72,7 @@ def get_reading_plan(plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@reading_plan_bp.route("", methods=["POST"])
+@reading_plan_bp.route("/create", methods=["POST"])
 @jwt_required()
 def create_reading_plan():
     """
@@ -457,8 +304,9 @@ def upload_document():
         
         # Sauvegarder le fichier
         filename = secure_filename(file.filename)
-        # Configuration du dossier d'upload à définir dans ton app.py
-        upload_path = os.path.join('/path/to/upload/folder', 'documents', filename)
+        # Tu devras configurer UPLOAD_FOLDER dans ton app.py
+        from flask import current_app
+        upload_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', '/tmp'), 'documents', filename)
         os.makedirs(os.path.dirname(upload_path), exist_ok=True)
         file.save(upload_path)
         
