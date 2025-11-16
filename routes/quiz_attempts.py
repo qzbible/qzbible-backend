@@ -1033,6 +1033,7 @@ def get_quizzes_last_attempts(chapter_id):
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
     
 
+ 
 @quiz_attempts_bp.route("/quiz/<quiz_id>/last-attempt", methods=["GET"])
 @jwt_required()
 def get_quiz_last_attempt(quiz_id):

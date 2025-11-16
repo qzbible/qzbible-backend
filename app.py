@@ -50,6 +50,9 @@ def create_app():
     from routes.catalog_routes import catalog_bp
     from routes.manual_unlocks_routes import manual_unlocks_bp
     from routes.user_progress_routes import user_progress_bp
+
+    from routes.reading_plan_route import reading_plan_bp
+    from routes.reading_plan_route import documents_bp
    
 
     from routes.otp_routes import otp_bp
@@ -68,6 +71,9 @@ def create_app():
     app.register_blueprint(catalog_bp)
     app.register_blueprint(manual_unlocks_bp)
     app.register_blueprint(user_progress_bp)
+
+    app.register_blueprint(documents_bp)
+    app.register_blueprint(reading_plan_bp)
     
     # CORS : autoriser le front React à communiquer avec le backend
     CORS(app, supports_credentials=True, origins=[Config.ALLOWED_ORIGINS])
