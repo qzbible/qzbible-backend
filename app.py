@@ -206,7 +206,7 @@ def create_app():
                     fg='red', bold=True
                 ))
     
-    
+    #  Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MTg2NTcwMiwianRpIjoiNjhmZTY4M2EtMGJmMi00ZjY4LTk1ZjgtZDgzYzQwZWMyYzM0IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjY4ZmViMGNmNGE2NDc1ZWUyMTJiZWVmYiIsIm5iZiI6MTc2MTg2NTcwMiwiZXhwIjoyMDc3MjI1NzAyLCJyb2xlIjoiYWRtaW4ifQ.6ojkFzPdUtXYfH_K_yEuQipTykzdjmeNyut4PvO7d7w
     @app.cli.command('list-images')
     @click.option('--categorie', default=None, help='Filtrer par catégorie')
     def list_images_command(categorie):
