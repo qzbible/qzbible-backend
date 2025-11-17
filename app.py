@@ -51,8 +51,8 @@ def create_app():
     from routes.manual_unlocks_routes import manual_unlocks_bp
     from routes.user_progress_routes import user_progress_bp
 
-    from routes.reading_plan_route import reading_plan_bp
-    from routes.reading_plan_route import documents_bp
+    from routes.reading_plan_routes import reading_plan_bp
+    from routes.documents_routes import documents_bp
    
 
     from routes.otp_routes import otp_bp
