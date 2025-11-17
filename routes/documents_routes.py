@@ -561,4 +561,385 @@ def get_document_plan_helper(doc_id):
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
+
+@documents_bp.route("/church/<church_id>", methods=["GET"])
+@jwt_required()
+def get_church_documents(church_id):
+    """
+    Récupérer les documents d'une église spécifique
+    ---
+    tags:
+      - Documents
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: path
+        name: church_id
+        required: true
+        schema:
+          type: string
+        description: ID de l'église
+        example: "507f1f77bcf86cd799439050"
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum: [theology, devotional, study, biography, commentary]
+        description: Filtrer par catégorie
+        example: "devotional"
+      - in: query
+        name: language
+        schema:
+          type: string
+          enum: [fr, en]
+        description: Filtrer par langue
+        example: "fr"
+      - in: query
+        name: has_structure
+        schema:
+          type: boolean
+        description: Filtrer les documents avec structure définie
+        example: true
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: Numéro de page
+        example: 1
+      - in: query
+        name: per_page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        description: Nombre d'éléments par page
+        example: 20
+      - in: query
+        name: sort_by
+        schema:
+          type: string
+          enum: [created_at, title, author, download_count]
+          default: created_at
+        description: Critère de tri
+        example: "title"
+    responses:
+      200:
+        description: Documents de l'église récupérés avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Documents de l'église récupérés avec succès"
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                        example: "507f1f77bcf86cd799439060"
+                      title:
+                        type: string
+                        example: "La Marche Chrétienne"
+                      author:
+                        type: string
+                        example: "Watchman Nee"
+                      category:
+                        type: string
+                        enum: [theology, devotional, study, biography, commentary]
+                        example: "devotional"
+                      language:
+                        type: string
+                        enum: [fr, en]
+                        example: "fr"
+                      description:
+                        type: string
+                        example: "Un guide pratique pour la vie chrétienne"
+                      file_info:
+                        type: object
+                        properties:
+                          original_filename:
+                            type: string
+                            example: "la_marche_chretienne.pdf"
+                          file_path:
+                            type: string
+                            example: "/path/to/uploads/documents/la_marche_chretienne.pdf"
+                            description: "Chemin absolu du fichier sur le serveur"
+                          file_size:
+                            type: integer
+                            example: 2048576
+                            description: "Taille du fichier en bytes"
+                          upload_date:
+                            type: string
+                            format: date-time
+                      absolute_file_path:
+                        type: string
+                        example: "/var/www/qbible/uploads/documents/la_marche_chretienne.pdf"
+                        description: "Chemin absolu complet du fichier"
+      401:
+        description: Token JWT manquant ou invalide
+      403:
+        description: Accès refusé
+      404:
+        description: Église non trouvée
+      500:
+        description: Erreur serveur
+    """
+    try:
+        # Vérification des permissions
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
+        # Vérifier si l'église existe
+        church = mongo.db.churches.find_one({"_id": ObjectId(church_id)})
+        if not church:
+            return jsonify({"message": "Église non trouvée"}), 404
+        
+        # Vérifier les permissions d'accès
+        user_church_id = str(user.get("church_id", ""))
+        if user_church_id != church_id and user.get("role") not in ["admin", "super_admin"]:
+            # L'utilisateur peut voir seulement les documents publics des autres églises
+            access_filter = {"access.visibility": "public"}
+        else:
+            # L'utilisateur peut voir tous les documents de son église
+            access_filter = {"access.visibility": {"$in": ["public", "church_only", "private"]}}
+        
+        # Préparer les filtres
+        filters = {"access.church_id": ObjectId(church_id)}
+        filters.update(access_filter)
+        
+        if request.args.get("category"):
+            filters["category"] = request.args.get("category")
+        if request.args.get("language"):
+            filters["language"] = request.args.get("language")
+        if request.args.get("has_structure"):
+            has_structure = request.args.get("has_structure").lower() == 'true'
+            if has_structure:
+                filters["structure.total_pages"] = {"$gt": 0}
+            else:
+                filters["$or"] = [
+                    {"structure.total_pages": {"$exists": False}},
+                    {"structure.total_pages": 0}
+                ]
+        
+        # Pagination
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 20))
+        skip = (page - 1) * per_page
+        
+        # Tri
+        sort_by = request.args.get("sort_by", "created_at")
+        sort_field = "stats.download_count" if sort_by == "download_count" else sort_by
+        sort_order = -1 if sort_by in ["created_at", "download_count"] else 1
+        
+        # Récupérer les documents
+        documents = list(DocumentModel.get_collection().find(filters)
+                        .sort(sort_field, sort_order)
+                        .skip(skip)
+                        .limit(per_page))
+        
+        # Compter le total
+        total = DocumentModel.get_collection().count_documents(filters)
+        
+        # Convertir les ObjectId et ajouter le chemin absolu
+        for doc in documents:
+            doc["_id"] = str(doc["_id"])
+            doc["access"]["uploaded_by"] = str(doc["access"]["uploaded_by"])
+            if doc["access"].get("church_id"):
+                doc["access"]["church_id"] = str(doc["access"]["church_id"])
+            
+            # Ajouter le chemin absolu du fichier
+            if doc.get("file_info", {}).get("file_path"):
+                doc["absolute_file_path"] = os.path.abspath(doc["file_info"]["file_path"])
+            else:
+                doc["absolute_file_path"] = None
+        
+        return jsonify({
+            "message": "Documents de l'église récupérés avec succès",
+            "data": documents,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page,
+            "church_info": {
+                "church_id": str(church["_id"]),
+                "church_name": church.get("name", "")
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+
+@documents_bp.route("/my-church", methods=["GET"])
+@jwt_required()
+def get_my_church_documents():
+    """
+    Récupérer les documents de mon église
+    ---
+    tags:
+      - Documents
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum: [theology, devotional, study, biography, commentary]
+        description: Filtrer par catégorie
+        example: "devotional"
+      - in: query
+        name: language
+        schema:
+          type: string
+          enum: [fr, en]
+        description: Filtrer par langue
+        example: "fr"
+      - in: query
+        name: uploaded_by_me
+        schema:
+          type: boolean
+        description: Filtrer les documents que j'ai uploadés
+        example: true
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: Numéro de page
+        example: 1
+      - in: query
+        name: per_page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        description: Nombre d'éléments par page
+        example: 20
+    responses:
+      200:
+        description: Documents de mon église récupérés avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Documents de votre église récupérés avec succès"
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      title:
+                        type: string
+                      author:
+                        type: string
+                      absolute_file_path:
+                        type: string
+                        example: "/var/www/qbible/uploads/documents/document.pdf"
+                        description: "Chemin absolu complet du fichier"
+                total:
+                  type: integer
+                page:
+                  type: integer
+                per_page:
+                  type: integer
+                total_pages:
+                  type: integer
+      401:
+        description: Token JWT manquant ou invalide
+      404:
+        description: Utilisateur sans église
+      500:
+        description: Erreur serveur
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
+        if not user.get("church_id"):
+            return jsonify({"message": "Utilisateur sans église"}), 404
+        
+        church_id = str(user["church_id"])
+        
+        # Ajouter le filtre "uploaded_by_me" si demandé
+        if request.args.get("uploaded_by_me"):
+            filters = {
+                "access.church_id": ObjectId(church_id),
+                "access.uploaded_by": ObjectId(current_user_id)
+            }
+        else:
+            filters = {"access.church_id": ObjectId(church_id)}
+        
+        if request.args.get("category"):
+            filters["category"] = request.args.get("category")
+        if request.args.get("language"):
+            filters["language"] = request.args.get("language")
+        
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 20))
+        skip = (page - 1) * per_page
+        
+        documents = list(DocumentModel.get_collection().find(filters)
+                        .sort("created_at", -1)
+                        .skip(skip)
+                        .limit(per_page))
+        
+        total = DocumentModel.get_collection().count_documents(filters)
+        
+        # Convertir les ObjectId et ajouter le chemin absolu
+        for doc in documents:
+            doc["_id"] = str(doc["_id"])
+            doc["access"]["uploaded_by"] = str(doc["access"]["uploaded_by"])
+            if doc["access"].get("church_id"):
+                doc["access"]["church_id"] = str(doc["access"]["church_id"])
+            
+            # Ajouter le chemin absolu du fichier
+            if doc.get("file_info", {}).get("file_path"):
+                doc["absolute_file_path"] = os.path.abspath(doc["file_info"]["file_path"])
+            else:
+                doc["absolute_file_path"] = None
+        
+        return jsonify({
+            "message": "Documents de votre église récupérés avec succès",
+            "data": documents,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
  

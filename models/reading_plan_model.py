@@ -1,4 +1,5 @@
 # models/reading_plan_model.py
+import os
 from bson import ObjectId
 from datetime import datetime, timedelta
 from extensions import mongo
@@ -501,12 +502,33 @@ class DocumentModel:
         
         documents = list(DocumentModel.get_collection().find(query).sort("created_at", -1))
         
-        # Ajouter des estimations de lecture
+        # # Ajouter des estimations de lecture
+        # for doc in documents:
+        #     doc["_id"] = str(doc["_id"])
+        #     doc["access"]["uploaded_by"] = str(doc["access"]["uploaded_by"])
+        #     if doc["access"].get("church_id"):
+        #         doc["access"]["church_id"] = str(doc["access"]["church_id"])
+            
+        #     if 'structure' in doc and 'total_pages' in doc['structure']:
+        #         pages = doc['structure']['total_pages']
+        #         doc['reading_estimates'] = {
+        #             'fast': f"{max(1, pages // 15)} jours ({15} pages/jour)",
+        #             'normal': f"{max(1, pages // 5)} jours (5 pages/jour)",
+        #             'slow': f"{max(1, pages // 3)} jours (3 pages/jour)"
+        #         }
+
+        # Ajouter des estimations de lecture et chemin absolu
         for doc in documents:
             doc["_id"] = str(doc["_id"])
             doc["access"]["uploaded_by"] = str(doc["access"]["uploaded_by"])
             if doc["access"].get("church_id"):
                 doc["access"]["church_id"] = str(doc["access"]["church_id"])
+            
+            # Ajouter le chemin absolu du fichier
+            if doc.get("file_info", {}).get("file_path"):
+                doc["absolute_file_path"] = os.path.abspath(doc["file_info"]["file_path"])
+            else:
+                doc["absolute_file_path"] = None
             
             if 'structure' in doc and 'total_pages' in doc['structure']:
                 pages = doc['structure']['total_pages']
