@@ -20,9 +20,9 @@ from services.reading_plan_service import (
     search_simple_plans_service
 )
 
-simple_plans_bp = Blueprint("simple_plans", __name__, url_prefix="/api/simple-plans")
+reading_plan_bp = Blueprint("simple_plans", __name__, url_prefix="/api/simple-plans")
 
-@simple_plans_bp.route("", methods=["GET"])
+@reading_plan_bp.route("", methods=["GET"])
 @jwt_required()
 def get_simple_plans():
     """
@@ -127,7 +127,7 @@ def get_simple_plans():
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/<plan_id>", methods=["GET"])
+@reading_plan_bp.route("/<plan_id>", methods=["GET"])
 @jwt_required()
 def get_simple_plan(plan_id):
     """
@@ -196,7 +196,7 @@ def get_simple_plan(plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/create", methods=["POST"])
+@reading_plan_bp.route("/create", methods=["POST"])
 @jwt_required()
 def create_simple_plan():
     """
@@ -285,7 +285,7 @@ def create_simple_plan():
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/<plan_id>/start", methods=["POST"])
+@reading_plan_bp.route("/<plan_id>/start", methods=["POST"])
 @jwt_required()
 def start_simple_plan(plan_id):
     """
@@ -340,7 +340,7 @@ def start_simple_plan(plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/my-plans", methods=["GET"])
+@reading_plan_bp.route("/my-plans", methods=["GET"])
 @jwt_required()
 def get_my_simple_plans():
     """
@@ -383,7 +383,7 @@ def get_my_simple_plans():
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/user-plan/<user_plan_id>/complete-day", methods=["POST"])
+@reading_plan_bp.route("/user-plan/<user_plan_id>/complete-day", methods=["POST"])
 @jwt_required()
 def complete_day(user_plan_id):
     """
@@ -436,7 +436,7 @@ def complete_day(user_plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/user-plan/<user_plan_id>/current", methods=["GET"])
+@reading_plan_bp.route("/user-plan/<user_plan_id>/current", methods=["GET"])
 @jwt_required()
 def get_current_reading(user_plan_id):
     """
@@ -474,7 +474,7 @@ def get_current_reading(user_plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-@simple_plans_bp.route("/search", methods=["GET"])
+@reading_plan_bp.route("/search", methods=["GET"])
 @jwt_required()
 def search_simple_plans():
     """
@@ -516,6 +516,4 @@ def search_simple_plans():
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-def register_simple_plans_blueprints(app):
-    """Enregistrer le blueprint"""
-    app.register_blueprint(simple_plans_bp)
+ 
