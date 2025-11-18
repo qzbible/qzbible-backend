@@ -12,7 +12,7 @@ from werkzeug.exceptions import HTTPException
 from bson.errors import InvalidId
 from flasgger import Swagger
 
-
+from flask import send_from_directory, current_app
 # Initialisation des extensions
 blacklist = set()
 
@@ -150,7 +150,7 @@ def create_app():
     })
 
     
-    from flask import send_from_directory, current_app
+
     # Route pour servir les fichiers uploadés
     @app.route("/uploads/images/<filename>")
     def uploaded_file(filename):
@@ -271,8 +271,8 @@ def create_app():
     
     
     
-    from flask import send_from_directory
-    import os
+   
+   
 
     @app.route('/files/documents/<filename>')
     def serve_pdf_file(filename):
