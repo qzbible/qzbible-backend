@@ -516,4 +516,104 @@ def delete_document(doc_id):
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
 
+@documents_bp.route("/view/<doc_id>", methods=["GET"])
+@jwt_required()
+def view_document(doc_id):
+    """
+    Servir un fichier PDF pour visualisation
+    ---
+    tags:
+      - Documents
+    parameters:
+      - in: path
+        name: doc_id
+        required: true
+        schema:
+          type: string
+        description: ID du document
+    responses:
+      200:
+        description: Fichier PDF
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      404:
+        description: Document non trouvé
+    """
+    try:
+        # Récupérer le document
+        document = DocumentModel.get_collection().find_one({"_id": ObjectId(doc_id)})
+        
+        if not document:
+            return jsonify({"message": "Document non trouvé"}), 404
+        
+        file_path = document.get("file_info", {}).get("file_path")
+        
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"message": "Fichier non trouvé"}), 404
+        
+        # Servir le fichier
+        from flask import send_file
+        return send_file(
+            file_path,
+            mimetype='application/pdf',
+            as_attachment=False,  # Pour affichage dans le navigateur
+            download_name=document.get("file_info", {}).get("original_filename", "document.pdf")
+        )
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+
+@documents_bp.route("/download/<doc_id>", methods=["GET"])
+@jwt_required()
+def download_document(doc_id):
+    """
+    Télécharger un fichier PDF
+    ---
+    tags:
+      - Documents
+    parameters:
+      - in: path
+        name: doc_id
+        required: true
+        schema:
+          type: string
+        description: ID du document
+    responses:
+      200:
+        description: Fichier PDF à télécharger
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      404:
+        description: Document non trouvé
+    """
+    try:
+        # Récupérer le document
+        document = DocumentModel.get_collection().find_one({"_id": ObjectId(doc_id)})
+        
+        if not document:
+            return jsonify({"message": "Document non trouvé"}), 404
+        
+        file_path = document.get("file_info", {}).get("file_path")
+        
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"message": "Fichier non trouvé"}), 404
+        
+        # Télécharger le fichier
+        from flask import send_file
+        return send_file(
+            file_path,
+            mimetype='application/pdf',
+            as_attachment=True,  # Force le téléchargement
+            download_name=document.get("file_info", {}).get("original_filename", "document.pdf")
+        )
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+
  
