@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 
 from schemas.reading_plan_schema import *
-from services.pdf_extraction_service import add_document_urls, extract_pdf_metadata
+from services.pdf_extraction_service import  add_public_url, extract_pdf_metadata
 from services.reading_plan_service import *
 from utils.decorators import admin_required
 
@@ -394,7 +394,7 @@ def get_my_church_documents():
             else:
                 doc["absolute_file_path"] = None
             # Ajouter les URLs de visualisation (pour usage client)
-            doc = add_document_urls(doc, request.host)
+            doc = add_public_url(doc, request.host)
         
         return jsonify({
             "message": "Documents de votre église récupérés avec succès",

@@ -268,6 +268,23 @@ def create_app():
                     f"✓ Dossier {staff_folder} nettoyé",
                     fg='green'
                 ))
+    
+    
+    
+    from flask import send_from_directory
+    import os
+
+    @app.route('/files/documents/<filename>')
+    def serve_pdf_file(filename):
+        """
+        Servir les fichiers PDF directement via URL
+        """
+        try:
+            documents_dir = os.path.join(app.config.get('UPLOAD_FOLDER', '/tmp'), 'documents')
+            return send_from_directory(documents_dir, filename, mimetype='application/pdf')
+        except Exception as e:
+            return "Fichier non trouvé", 404
+        
     return app
 
 

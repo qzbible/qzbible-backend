@@ -103,16 +103,19 @@ def detect_language_simple(title):
     
     return 'en' if english_score > french_score else 'fr'
 
-def add_document_urls(doc, request_host=None):
-    """Ajouter les URLs de visualisation et téléchargement"""
-    doc_id = str(doc["_id"])
-    
-    # Utiliser l'host de la requête ou un host par défaut
-    if request_host:
-        base_url = f"https://{request_host}"
+def add_public_url(doc, request_host=None):
+    """Ajouter l'URL publique du fichier PDF"""
+    if doc.get("file_info", {}).get("file_path"):
+        filename = os.path.basename(doc["file_info"]["file_path"])
+        
+        # Utiliser l'host de la requête ou un host par défaut
+        if request_host:
+            base_url = f"https://{request_host}"
+        else:
+            base_url = "https://dev-backend.qzbible.com"
+        
+        doc["public_url"] = f"{base_url}/files/documents/{filename}"
     else:
-        base_url = "https://dev-backend.qzbible.com"
+        doc["public_url"] = None
     
-    doc["view_url"] = f"{base_url}/api/documents/view/{doc_id}"
-    doc["download_url"] = f"{base_url}/api/documents/download/{doc_id}"
     return doc
