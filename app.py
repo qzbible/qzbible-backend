@@ -270,10 +270,6 @@ def create_app():
                 ))
     
     
-    
-   
-   
-
     @app.route('/files/documents/<filename>')
     def serve_pdf_file(filename):
         """
@@ -286,9 +282,6 @@ def create_app():
             return "Fichier non trouvé", 404
         
     return app
-
-
-
 
 
 # Point d'entrée
