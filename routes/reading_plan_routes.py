@@ -40,34 +40,39 @@ def get_simple_plans():
         example: "Bearer votre.jwt.token"
       - in: query
         name: book_focus
-        type: string
+        schema:
+          type: string
         required: false
         description: Filtrer par livre(s) (séparés par des virgules)
         example: "Psaumes,Proverbes"
       - in: query
         name: duration_months
-        type: integer
+        schema:
+          type: integer
         required: false
         description: Filtrer par durée en mois
         example: 2
       - in: query
         name: search
-        type: string
+        schema:
+          type: string
         required: false
         description: Terme de recherche
         example: "méditation"
       - in: query
         name: page
-        type: integer
+        schema:
+          type: integer
+          default: 1
         required: false
-        default: 1
         description: Numéro de page
         example: 1
       - in: query
         name: per_page
-        type: integer
+        schema:
+          type: integer
+          default: 20
         required: false
-        default: 20
         description: Nombre d'éléments par page
         example: 20
     responses:
@@ -85,6 +90,39 @@ def get_simple_plans():
                   type: array
                   items:
                     type: object
+                    properties:
+                      _id:
+                        type: string
+                        example: "507f1f77bcf86cd799439060"
+                      title:
+                        type: string
+                        example: "Psaumes et Proverbes"
+                      subtitle:
+                        type: string
+                        example: "Méditation quotidienne"
+                      description:
+                        type: string
+                      settings:
+                        type: object
+                        properties:
+                          duration_months:
+                            type: integer
+                          daily_chapters:
+                            type: integer
+                      meta:
+                        type: object
+                        properties:
+                          emoji:
+                            type: string
+                          color:
+                            type: string
+                      stats:
+                        type: object
+                        properties:
+                          subscribers:
+                            type: integer
+                          completions:
+                            type: integer
                 total:
                   type: integer
                 page:
@@ -98,6 +136,7 @@ def get_simple_plans():
       500:
         description: Erreur serveur
     """
+
     try:
         # Préparer les filtres
         filters = {}
@@ -166,18 +205,83 @@ def get_simple_plan(plan_id):
                   example: "Méditation quotidienne"
                 description:
                   type: string
+                  example: "Car l'Éternel donne la sagesse; De sa bouche sortent la connaissance et l'intelligence - Proverbes 2:6"
                 duration:
                   type: object
+                  properties:
+                    months:
+                      type: integer
+                      example: 2
+                    label:
+                      type: string
+                      example: "2 mois"
                 daily_reading:
                   type: object
+                  properties:
+                    chapters:
+                      type: integer
+                      example: 2
+                    label:
+                      type: string
+                      example: "2 chapitres par jour"
                 notifications:
                   type: object
+                  properties:
+                    available:
+                      type: boolean
+                      example: true
+                    label:
+                      type: string
+                      example: "Notifications quotidiennes disponibles"
                 auto_save:
                   type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    label:
+                      type: string
+                      example: "Progression automatiquement sauvegardée"
                 schedule_preview:
                   type: array
+                  items:
+                    type: object
+                    properties:
+                      day:
+                        type: integer
+                        example: 1
+                      label:
+                        type: string
+                        example: "Jour 1"
+                      passages:
+                        type: array
+                        items:
+                          type: string
+                        example: ["Genèse 1-3"]
+                      estimated_time:
+                        type: integer
+                        example: 15
                 meta:
                   type: object
+                  properties:
+                    emoji:
+                      type: string
+                      example: "💛"
+                    color:
+                      type: string
+                      example: "#FFA726"
+                stats:
+                  type: object
+                  properties:
+                    subscribers:
+                      type: integer
+                      example: 245
+                    completions:
+                      type: integer
+                      example: 89
+                    avg_rating:
+                      type: number
+                      example: 4.5
       404:
         description: Plan non trouvé
       401:
@@ -204,6 +308,14 @@ def create_simple_plan():
     ---
     tags:
       - Simple Reading Plans
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
     requestBody:
       required: true
       content:
@@ -222,23 +334,29 @@ def create_simple_plan():
               title:
                 type: string
                 example: "Psaumes et Proverbes"
+                description: "Titre du plan"
               subtitle:
                 type: string
                 example: "Méditation quotidienne"
+                description: "Sous-titre du plan"
               description:
                 type: string
                 example: "Car l'Éternel donne la sagesse..."
+                description: "Description ou verset du plan"
               duration_months:
                 type: integer
                 example: 2
+                description: "Durée du plan en mois"
               daily_chapters:
                 type: integer
                 example: 2
+                description: "Nombre de chapitres par jour"
               book_focus:
                 type: array
                 items:
                   type: string
                 example: ["Psaumes", "Proverbes"]
+                description: "Livres sur lesquels se concentre le plan"
               reading_schedule:
                 type: array
                 items:
@@ -246,25 +364,50 @@ def create_simple_plan():
                   properties:
                     day:
                       type: integer
+                      example: 1
                     label:
                       type: string
+                      example: "Jour 1"
                     passages:
                       type: array
                       items:
                         type: string
+                      example: ["Genèse 1-3"]
                     estimated_time:
                       type: integer
+                      example: 15
+                description: "Planning de lecture détaillé"
               emoji:
                 type: string
                 example: "💛"
+                description: "Emoji du plan (optionnel)"
               color:
                 type: string
                 example: "#FFA726"
+                description: "Couleur du plan (optionnel)"
     responses:
       201:
         description: Plan créé avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Plan de lecture créé avec succès"
+                plan_id:
+                  type: string
+                  example: "507f1f77bcf86cd799439060"
       400:
         description: Données invalides
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                errors:
+                  type: object
       401:
         description: Token JWT manquant ou invalide
       500:
@@ -294,11 +437,20 @@ def start_simple_plan(plan_id):
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: path
         name: plan_id
         required: true
         schema:
           type: string
+        description: ID du plan à commencer
+        example: "507f1f77bcf86cd799439060"
     requestBody:
       required: false
       content:
@@ -309,12 +461,25 @@ def start_simple_plan(plan_id):
               reminder_time:
                 type: string
                 example: "07:00"
+                description: "Heure de rappel quotidien (format HH:MM)"
               reminder_enabled:
                 type: boolean
                 example: true
+                description: "Activer les rappels"
     responses:
       201:
         description: Plan commencé avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Inscription au plan réussie"
+                user_plan_id:
+                  type: string
+                  example: "507f1f77bcf86cd799439061"
       400:
         description: Déjà inscrit ou données invalides
       404:
@@ -354,15 +519,63 @@ def get_my_simple_plans():
         required: true
         schema:
           type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: query
         name: status
         schema:
           type: string
           enum: [active, completed, paused]
         description: Filtrer par statut
+        example: "active"
     responses:
       200:
         description: Plans récupérés avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Vos plans récupérés avec succès"
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      user_id:
+                        type: string
+                      plan_id:
+                        type: string
+                      progress:
+                        type: object
+                        properties:
+                          current_day:
+                            type: integer
+                          completed_days:
+                            type: array
+                            items:
+                              type: integer
+                          completion_percentage:
+                            type: number
+                      status:
+                        type: string
+                      plan_details:
+                        type: object
+                        properties:
+                          title:
+                            type: string
+                          subtitle:
+                            type: string
+                          emoji:
+                            type: string
+                          color:
+                            type: string
+                total:
+                  type: integer
       401:
         description: Token JWT manquant ou invalide
       500:
@@ -392,11 +605,20 @@ def complete_day(user_plan_id):
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: path
         name: user_plan_id
         required: true
         schema:
           type: string
+        description: ID du plan utilisateur
+        example: "507f1f77bcf86cd799439061"
     requestBody:
       required: true
       content:
@@ -409,9 +631,21 @@ def complete_day(user_plan_id):
               day:
                 type: integer
                 example: 1
+                description: "Numéro du jour à marquer comme complété"
     responses:
       200:
         description: Jour marqué comme complété
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Jour marqué comme complété"
+                current_day:
+                  type: integer
+                  example: 2
       400:
         description: Données invalides
       404:
@@ -445,14 +679,65 @@ def get_current_reading(user_plan_id):
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: path
         name: user_plan_id
         required: true
         schema:
           type: string
+        description: ID du plan utilisateur
+        example: "507f1f77bcf86cd799439061"
     responses:
       200:
         description: Lecture actuelle récupérée
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Lecture actuelle récupérée avec succès"
+                data:
+                  type: object
+                  properties:
+                    current_reading:
+                      type: object
+                      properties:
+                        day:
+                          type: integer
+                          example: 1
+                        label:
+                          type: string
+                          example: "Jour 1"
+                        passages:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Genèse 1-3"]
+                        estimated_time:
+                          type: integer
+                          example: 15
+                    progress:
+                      type: object
+                      properties:
+                        current_day:
+                          type: integer
+                        completed_days:
+                          type: array
+                          items:
+                            type: integer
+                        completion_percentage:
+                          type: number
+                    plan_title:
+                      type: string
+                      example: "Psaumes et Proverbes"
       404:
         description: Plan non trouvé
       401:
@@ -483,17 +768,47 @@ def search_simple_plans():
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: query
         name: q
         required: true
         schema:
           type: string
         description: Terme de recherche
+        example: "psaumes"
     responses:
       200:
         description: Résultats de recherche
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Résultats de recherche récupérés avec succès"
+                data:
+                  type: array
+                  items:
+                    type: object
+                total:
+                  type: integer
       400:
         description: Terme de recherche manquant
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Terme de recherche requis (paramètre 'q')"
       401:
         description: Token JWT manquant ou invalide
       500:
