@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 
 from schemas.reading_plan_schema import *
-from services.pdf_extraction_service import extract_pdf_metadata
+from services.pdf_extraction_service import add_document_urls, extract_pdf_metadata
 from services.reading_plan_service import *
 from utils.decorators import admin_required
 
@@ -393,6 +393,8 @@ def get_my_church_documents():
                 doc["absolute_file_path"] = os.path.abspath(doc["file_info"]["file_path"])
             else:
                 doc["absolute_file_path"] = None
+            # Ajouter les URLs de visualisation (pour usage client)
+            doc = add_document_urls(doc, request.host)
         
         return jsonify({
             "message": "Documents de votre église récupérés avec succès",
@@ -515,46 +517,87 @@ def delete_document(doc_id):
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
-
 @documents_bp.route("/view/<doc_id>", methods=["GET"])
 @jwt_required()
 def view_document(doc_id):
     """
-    Servir un fichier PDF pour visualisation
+    Visualiser un fichier PDF avec contrôle d'accès
     ---
     tags:
       - Documents
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: path
         name: doc_id
         required: true
         schema:
           type: string
         description: ID du document
+        example: "507f1f77bcf86cd799439060"
     responses:
       200:
-        description: Fichier PDF
+        description: Fichier PDF pour visualisation
         content:
           application/pdf:
             schema:
               type: string
               format: binary
+      401:
+        description: Token JWT manquant ou invalide
+      403:
+        description: Accès refusé au document
       404:
         description: Document non trouvé
+      500:
+        description: Erreur serveur
     """
     try:
+        # Récupérer l'utilisateur actuel
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
         # Récupérer le document
         document = DocumentModel.get_collection().find_one({"_id": ObjectId(doc_id)})
         
         if not document:
             return jsonify({"message": "Document non trouvé"}), 404
         
+        # Vérifier les autorisations d'accès
+        can_access = False
+        
+        # 1. L'utilisateur qui a uploadé le document
+        if str(document["access"]["uploaded_by"]) == current_user_id:
+            can_access = True
+        
+        # 2. Utilisateur de la même église que le document
+        if (user.get("church_id") and 
+            str(user["church_id"]) == str(document["access"].get("church_id", ""))):
+            can_access = True
+        
+        # 3. Admin/Super admin
+        if user.get("role") in ["admin", "super_admin"]:
+            can_access = True
+        
+        if not can_access:
+            return jsonify({"message": "Accès refusé - vous n'avez pas l'autorisation de voir ce document"}), 403
+        
+        # Vérifier que le fichier existe
         file_path = document.get("file_info", {}).get("file_path")
         
         if not file_path or not os.path.exists(file_path):
-            return jsonify({"message": "Fichier non trouvé"}), 404
+            return jsonify({"message": "Fichier non trouvé sur le serveur"}), 404
         
-        # Servir le fichier
+        # Servir le fichier pour visualisation
         from flask import send_file
         return send_file(
             file_path,
@@ -570,17 +613,25 @@ def view_document(doc_id):
 @jwt_required()
 def download_document(doc_id):
     """
-    Télécharger un fichier PDF
+    Télécharger un fichier PDF avec contrôle d'accès
     ---
     tags:
       - Documents
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
       - in: path
         name: doc_id
         required: true
         schema:
           type: string
         description: ID du document
+        example: "507f1f77bcf86cd799439060"
     responses:
       200:
         description: Fichier PDF à télécharger
@@ -589,22 +640,56 @@ def download_document(doc_id):
             schema:
               type: string
               format: binary
+      401:
+        description: Token JWT manquant ou invalide
+      403:
+        description: Accès refusé au document
       404:
         description: Document non trouvé
+      500:
+        description: Erreur serveur
     """
     try:
+        # Récupérer l'utilisateur actuel
+        current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if not user:
+            return jsonify({"message": "Utilisateur non trouvé"}), 404
+        
         # Récupérer le document
         document = DocumentModel.get_collection().find_one({"_id": ObjectId(doc_id)})
         
         if not document:
             return jsonify({"message": "Document non trouvé"}), 404
         
+        # Vérifier les autorisations d'accès (mêmes règles que pour view)
+        can_access = False
+        
+        # 1. L'utilisateur qui a uploadé le document
+        if str(document["access"]["uploaded_by"]) == current_user_id:
+            can_access = True
+        
+        # 2. Utilisateur de la même église que le document
+        if (user.get("church_id") and 
+            str(user["church_id"]) == str(document["access"].get("church_id", ""))):
+            can_access = True
+        
+        # 3. Admin/Super admin
+        if user.get("role") in ["admin", "super_admin"]:
+            can_access = True
+        
+        if not can_access:
+            return jsonify({"message": "Accès refusé - vous n'avez pas l'autorisation de télécharger ce document"}), 403
+        
+        # Vérifier que le fichier existe
         file_path = document.get("file_info", {}).get("file_path")
         
         if not file_path or not os.path.exists(file_path):
-            return jsonify({"message": "Fichier non trouvé"}), 404
+            return jsonify({"message": "Fichier non trouvé sur le serveur"}), 404
         
-        # Télécharger le fichier
+        # Servir le fichier pour téléchargement
         from flask import send_file
         return send_file(
             file_path,

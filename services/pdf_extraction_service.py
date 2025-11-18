@@ -102,3 +102,17 @@ def detect_language_simple(title):
     english_score = sum(1 for word in english_indicators if word in title_lower)
     
     return 'en' if english_score > french_score else 'fr'
+
+def add_document_urls(doc, request_host=None):
+    """Ajouter les URLs de visualisation et téléchargement"""
+    doc_id = str(doc["_id"])
+    
+    # Utiliser l'host de la requête ou un host par défaut
+    if request_host:
+        base_url = f"https://{request_host}"
+    else:
+        base_url = "https://dev-backend.qzbible.com"
+    
+    doc["view_url"] = f"{base_url}/api/documents/view/{doc_id}"
+    doc["download_url"] = f"{base_url}/api/documents/download/{doc_id}"
+    return doc
