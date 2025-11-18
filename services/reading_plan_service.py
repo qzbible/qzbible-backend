@@ -213,3 +213,5 @@ def update_document_structure_service(document_id, structure_data):
     """Mettre à jour la structure d'un document"""
     result, status = DocumentModel.update_structure(document_id, structure_data)
     return result, status
+
+

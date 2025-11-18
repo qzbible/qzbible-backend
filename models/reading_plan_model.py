@@ -430,39 +430,21 @@ class DocumentModel:
     
     @staticmethod
     def create_document(data, file_info, uploaded_by):
-        """Créer un nouveau document"""
+        """Créer un nouveau document avec les champs essentiels uniquement"""
         document = {
             "title": data["title"],
             "author": data["author"],
-            "type": "pdf",
             "category": data["category"],
             "language": data.get("language", "fr"),
-            "description": data.get("description", ""),
-            "tags": data.get("tags", []),
             "file_info": file_info,
             "structure": data.get("structure", {
-                "total_pages": 0,
-                "chapters": [],
-                "sections": []
+                "total_pages": 0
             }),
-            "metadata": {
-                "difficulty_level": data.get("difficulty_level", "intermediate"),
-                "target_audience": data.get("target_audience", "all"),
-                "isbn": data.get("isbn")
-            },
             "access": {
-                "visibility": data.get("visibility", "public"),
                 "church_id": ObjectId(data["church_id"]) if data.get("church_id") else None,
-                "uploaded_by": ObjectId(uploaded_by),
-                "permissions": ["read", "download", "share"]
+                "uploaded_by": ObjectId(uploaded_by)
             },
-            "stats": {
-                "download_count": 0,
-                "view_count": 0,
-                "plans_using": 0
-            },
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": datetime.utcnow()
         }
         
         result = DocumentModel.get_collection().insert_one(document)

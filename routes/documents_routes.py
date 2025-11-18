@@ -8,19 +8,18 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 
 from schemas.reading_plan_schema import *
+from services.pdf_extraction_service import extract_pdf_metadata
 from services.reading_plan_service import *
 from utils.decorators import admin_required
 
  
 documents_bp = Blueprint("documents", __name__, url_prefix="/api/documents")
 
-# Routes pour les documents
 @documents_bp.route("/upload", methods=["POST"])
 @jwt_required()
-@admin_required
 def upload_document():
     """
-    Upload d'un document PDF (admin uniquement)
+    Upload d'un document PDF simplifié
     ---
     tags:
       - Documents
@@ -32,59 +31,13 @@ def upload_document():
         required: true
         schema:
           type: string
-        description: Token JWT de l'utilisateur (admin requis)
+        description: Token JWT de l'utilisateur
         example: "Bearer votre.jwt.token"
       - in: formData
         name: file
         type: file
         required: true
         description: Fichier PDF à uploader
-      - in: formData
-        name: title
-        type: string
-        required: true
-        description: Titre du document
-        example: "La Marche Chrétienne"
-        minLength: 2
-        maxLength: 200
-      - in: formData
-        name: author
-        type: string
-        required: true
-        description: Auteur du document
-        example: "Watchman Nee"
-        minLength: 2
-        maxLength: 100
-      - in: formData
-        name: category
-        type: string
-        required: true
-        enum: [theology, devotional, study, biography, commentary]
-        description: Catégorie du document
-        example: "devotional"
-      - in: formData
-        name: language
-        type: string
-        required: false
-        enum: [fr, en]
-        default: fr
-        description: Langue du document
-        example: "fr"
-      - in: formData
-        name: description
-        type: string
-        required: false
-        maxLength: 1000
-        description: Description optionnelle
-        example: "Un guide pratique pour la vie chrétienne"
-      - in: formData
-        name: visibility
-        type: string
-        required: false
-        enum: [public, church_only, private]
-        default: public
-        description: Visibilité du document
-        example: "public"
     responses:
       201:
         description: Document uploadé avec succès
@@ -99,24 +52,22 @@ def upload_document():
                 document_id:
                   type: string
                   example: "507f1f77bcf86cd799439060"
-                  description: "ID du document créé"
-      400:
-        description: Données invalides ou fichier manquant
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
+                title:
                   type: string
-                  example: "Aucun fichier fourni"
-                errors:
-                  type: object
-                  description: "Erreurs de validation"
+                  example: "La Marche Chrétienne"
+                author:
+                  type: string
+                  example: "Auteur inconnu"
+                file_size:
+                  type: integer
+                  example: 2048576
+                absolute_file_path:
+                  type: string
+                  example: "/var/www/qbible/uploads/documents/la_marche_chretienne.pdf"
+      400:
+        description: Fichier invalide ou manquant
       401:
         description: Token JWT manquant ou invalide
-      403:
-        description: Accès refusé (admin requis)
       500:
         description: Erreur serveur
     """
@@ -131,42 +82,58 @@ def upload_document():
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({"message": "Seuls les fichiers PDF sont autorisés"}), 400
         
-        # Valider les métadonnées
-        metadata = {
-            'title': request.form.get('title'),
-            'author': request.form.get('author'),
-            'category': request.form.get('category'),
-            'language': request.form.get('language', 'fr'),
-            'description': request.form.get('description', ''),
-            'visibility': request.form.get('visibility', 'public')
-        }
-        
-        errors = DocumentCreateSchema().validate(metadata)
-        if errors:
-            return jsonify({"errors": errors}), 400
-        
         # Sauvegarder le fichier
         filename = secure_filename(file.filename)
-        # Tu devras configurer UPLOAD_FOLDER dans ton app.py
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        unique_filename = f"{timestamp}_{filename}"
+        
         from flask import current_app
-        upload_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', '/tmp'), 'documents', filename)
+        upload_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', '/tmp'), 'documents', unique_filename)
         os.makedirs(os.path.dirname(upload_path), exist_ok=True)
         file.save(upload_path)
+        
+        # Métadonnées basiques extraites du nom de fichier
+        title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').title()
+        
+        # Métadonnées minimales
+        metadata = {
+            'title': title,
+            'author': 'Auteur inconnu',
+            'category': 'study',
+            'language': 'fr'
+        }
         
         file_info = {
             'original_filename': file.filename,
             'file_path': upload_path,
             'file_size': os.path.getsize(upload_path),
-            'mime_type': 'application/pdf',
             'upload_date': datetime.utcnow()
         }
         
         current_user_id = get_jwt_identity()
+        from extensions import mongo
+        user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
+        
+        if user and user.get("church_id"):
+            metadata['church_id'] = str(user["church_id"])
+        
         result, status = create_document_service(metadata, file_info, current_user_id)
         
-        return jsonify(result), status
+        # Réponse simplifiée
+        response_data = {
+            "message": result["message"],
+            "document_id": result["document_id"],
+            "title": metadata['title'],
+            "author": metadata['author'],
+            "file_size": file_info['file_size'],
+            "absolute_file_path": os.path.abspath(upload_path)
+        }
+        
+        return jsonify(response_data), status
         
     except Exception as e:
+        if 'upload_path' in locals() and os.path.exists(upload_path):
+            os.remove(upload_path)
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
 @documents_bp.route("/<doc_id>/structure", methods=["POST"])
@@ -790,7 +757,7 @@ def get_church_documents(church_id):
 @jwt_required()
 def get_my_church_documents():
     """
-    Récupérer les documents de mon église
+    Lister les documents de mon église
     ---
     tags:
       - Documents
@@ -802,26 +769,6 @@ def get_my_church_documents():
           type: string
         description: Token JWT de l'utilisateur
         example: "Bearer votre.jwt.token"
-      - in: query
-        name: category
-        schema:
-          type: string
-          enum: [theology, devotional, study, biography, commentary]
-        description: Filtrer par catégorie
-        example: "devotional"
-      - in: query
-        name: language
-        schema:
-          type: string
-          enum: [fr, en]
-        description: Filtrer par langue
-        example: "fr"
-      - in: query
-        name: uploaded_by_me
-        schema:
-          type: boolean
-        description: Filtrer les documents que j'ai uploadés
-        example: true
       - in: query
         name: page
         schema:
@@ -835,13 +782,13 @@ def get_my_church_documents():
         schema:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 50
           default: 20
         description: Nombre d'éléments par page
         example: 20
     responses:
       200:
-        description: Documents de mon église récupérés avec succès
+        description: Documents de votre église récupérés avec succès
         content:
           application/json:
             schema:
@@ -857,22 +804,47 @@ def get_my_church_documents():
                     properties:
                       _id:
                         type: string
+                        example: "507f1f77bcf86cd799439060"
                       title:
                         type: string
+                        example: "La Marche Chrétienne"
                       author:
                         type: string
+                        example: "Watchman Nee"
+                      category:
+                        type: string
+                        example: "study"
+                      language:
+                        type: string
+                        example: "fr"
+                      file_info:
+                        type: object
+                        properties:
+                          original_filename:
+                            type: string
+                          file_size:
+                            type: integer
+                          upload_date:
+                            type: string
+                            format: date-time
                       absolute_file_path:
                         type: string
-                        example: "/var/www/qbible/uploads/documents/document.pdf"
-                        description: "Chemin absolu complet du fichier"
+                        example: "/var/www/qbible/uploads/documents/file.pdf"
+                      created_at:
+                        type: string
+                        format: date-time
                 total:
                   type: integer
+                  example: 25
                 page:
                   type: integer
+                  example: 1
                 per_page:
                   type: integer
+                  example: 20
                 total_pages:
                   type: integer
+                  example: 2
       401:
         description: Token JWT manquant ou invalide
       404:
@@ -881,6 +853,7 @@ def get_my_church_documents():
         description: Erreur serveur
     """
     try:
+        # Récupérer l'utilisateur depuis le JWT
         current_user_id = get_jwt_identity()
         from extensions import mongo
         user = mongo.db.users.find_one({"_id": ObjectId(current_user_id)})
@@ -891,26 +864,17 @@ def get_my_church_documents():
         if not user.get("church_id"):
             return jsonify({"message": "Utilisateur sans église"}), 404
         
-        church_id = str(user["church_id"])
+        church_id = user["church_id"]
         
-        # Ajouter le filtre "uploaded_by_me" si demandé
-        if request.args.get("uploaded_by_me"):
-            filters = {
-                "access.church_id": ObjectId(church_id),
-                "access.uploaded_by": ObjectId(current_user_id)
-            }
-        else:
-            filters = {"access.church_id": ObjectId(church_id)}
+        # Filtre simple : seulement par église
+        filters = {"access.church_id": ObjectId(church_id)}
         
-        if request.args.get("category"):
-            filters["category"] = request.args.get("category")
-        if request.args.get("language"):
-            filters["language"] = request.args.get("language")
-        
+        # Pagination
         page = int(request.args.get("page", 1))
         per_page = int(request.args.get("per_page", 20))
         skip = (page - 1) * per_page
         
+        # Récupérer les documents
         documents = list(DocumentModel.get_collection().find(filters)
                         .sort("created_at", -1)
                         .skip(skip)
@@ -918,14 +882,13 @@ def get_my_church_documents():
         
         total = DocumentModel.get_collection().count_documents(filters)
         
-        # Convertir les ObjectId et ajouter le chemin absolu
+        # Convertir ObjectId et ajouter chemin absolu
         for doc in documents:
             doc["_id"] = str(doc["_id"])
             doc["access"]["uploaded_by"] = str(doc["access"]["uploaded_by"])
-            if doc["access"].get("church_id"):
-                doc["access"]["church_id"] = str(doc["access"]["church_id"])
+            doc["access"]["church_id"] = str(doc["access"]["church_id"])
             
-            # Ajouter le chemin absolu du fichier
+            # Ajouter le chemin absolu
             if doc.get("file_info", {}).get("file_path"):
                 doc["absolute_file_path"] = os.path.abspath(doc["file_info"]["file_path"])
             else:
