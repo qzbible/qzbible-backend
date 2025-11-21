@@ -50,7 +50,12 @@ services:
     env_file:
       - ./.flask.env
       - ./.mongo.env
+
+    volumes:
+ 
+      - media:/app/uploads 
     
+
     deploy:
       mode: replicated
       replicas: 1  # ← Attention: replicas à 0 = service désactivé
@@ -70,6 +75,8 @@ services:
           - node.role == manager
  
 
+volumes: 
+  media:
 
 networks:
   qzbible:
