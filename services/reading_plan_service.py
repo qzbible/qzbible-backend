@@ -142,10 +142,50 @@ def mark_day_completed_service(user_plan_id, day):
 
 def get_current_reading_service(user_plan_id):
     """Récupérer la lecture actuelle"""
-    result = UserSimplePlanModel.get_current_reading(user_plan_id)
-    if isinstance(result, tuple):
-        return result
-    return result
+    try:
+        print(f"DEBUG: Recherche user_plan_id = {user_plan_id}")
+        
+        user_plan = UserSimplePlanModel.get_collection().find_one({"_id": ObjectId(user_plan_id)})
+        
+        if not user_plan:
+            print(f"DEBUG: Aucun user_plan trouvé avec l'ID {user_plan_id}")
+            return {"message": "Plan utilisateur non trouvé"}, 404
+        
+        print(f"DEBUG: User plan trouvé: {user_plan}")
+        
+        current_day = user_plan["progress"]["current_day"]
+        print(f"DEBUG: Current day = {current_day}")
+        
+        # Récupérer le plan pour obtenir la lecture du jour
+        plan = SimpleReadingPlanModel.get_plan_by_id(user_plan["plan_id"])
+        if not plan:
+            print(f"DEBUG: Plan principal non trouvé avec l'ID {user_plan['plan_id']}")
+            return {"message": "Plan non trouvé"}, 404
+        
+        print(f"DEBUG: Plan principal trouvé: {plan['title']}")
+        
+        # Trouver la lecture du jour actuel
+        current_reading = None
+        for reading in plan["content"]["reading_schedule"]:
+            if reading["day"] == current_day:
+                current_reading = reading
+                break
+        
+        if not current_reading:
+            print(f"DEBUG: Aucune lecture trouvée pour le jour {current_day}")
+            return {"message": "Lecture du jour non trouvée"}, 404
+        
+        print(f"DEBUG: Lecture trouvée: {current_reading}")
+        
+        return {
+            "current_reading": current_reading,
+            "progress": user_plan["progress"],
+            "plan_title": plan["title"]
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Exception = {str(e)}")
+        return {"message": f"Erreur : {str(e)}"}, 500
 
 def search_simple_plans_service(search_term):
     """Rechercher dans les plans simples"""
