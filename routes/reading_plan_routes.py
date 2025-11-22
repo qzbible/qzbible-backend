@@ -316,98 +316,94 @@ def create_simple_plan():
           type: string
         description: Token JWT de l'utilisateur
         example: "Bearer votre.jwt.token"
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - title
-              - subtitle
-              - description
-              - duration_months
-              - daily_chapters
-              - book_focus
-              - reading_schedule
-            properties:
-              title:
+      - in: body
+        name: body
+        required: true
+        description: Données du plan de lecture
+        schema:
+          type: object
+          required:
+            - title
+            - subtitle
+            - description
+            - duration_months
+            - daily_chapters
+            - book_focus
+            - reading_schedule
+          properties:
+            title:
+              type: string
+              example: "Psaumes et Proverbes"
+              description: "Titre du plan"
+            subtitle:
+              type: string
+              example: "Méditation quotidienne"
+              description: "Sous-titre du plan"
+            description:
+              type: string
+              example: "Car l'Éternel donne la sagesse; De sa bouche sortent la connaissance et l'intelligence - Proverbes 2:6"
+              description: "Description ou verset du plan"
+            duration_months:
+              type: integer
+              example: 2
+              description: "Durée du plan en mois"
+            daily_chapters:
+              type: integer
+              example: 2
+              description: "Nombre de chapitres par jour"
+            book_focus:
+              type: array
+              items:
                 type: string
-                example: "Psaumes et Proverbes"
-                description: "Titre du plan"
-              subtitle:
-                type: string
-                example: "Méditation quotidienne"
-                description: "Sous-titre du plan"
-              description:
-                type: string
-                example: "Car l'Éternel donne la sagesse..."
-                description: "Description ou verset du plan"
-              duration_months:
-                type: integer
-                example: 2
-                description: "Durée du plan en mois"
-              daily_chapters:
-                type: integer
-                example: 2
-                description: "Nombre de chapitres par jour"
-              book_focus:
-                type: array
-                items:
-                  type: string
-                example: ["Psaumes", "Proverbes"]
-                description: "Livres sur lesquels se concentre le plan"
-              reading_schedule:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    day:
-                      type: integer
-                      example: 1
-                    label:
+              example: ["Psaumes", "Proverbes"]
+              description: "Livres sur lesquels se concentre le plan"
+            reading_schedule:
+              type: array
+              items:
+                type: object
+                properties:
+                  day:
+                    type: integer
+                    example: 1
+                  label:
+                    type: string
+                    example: "Jour 1"
+                  passages:
+                    type: array
+                    items:
                       type: string
-                      example: "Jour 1"
-                    passages:
-                      type: array
-                      items:
-                        type: string
-                      example: ["Genèse 1-3"]
-                    estimated_time:
-                      type: integer
-                      example: 15
-                description: "Planning de lecture détaillé"
-              emoji:
-                type: string
-                example: "💛"
-                description: "Emoji du plan (optionnel)"
-              color:
-                type: string
-                example: "#FFA726"
-                description: "Couleur du plan (optionnel)"
+                    example: ["Genèse 1-3"]
+                  estimated_time:
+                    type: integer
+                    example: 15
+              description: "Planning de lecture détaillé"
+            emoji:
+              type: string
+              example: "💛"
+              description: "Emoji du plan (optionnel)"
+            color:
+              type: string
+              example: "#FFA726"
+              description: "Couleur du plan (optionnel)"
     responses:
       201:
         description: Plan créé avec succès
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Plan de lecture créé avec succès"
-                plan_id:
-                  type: string
-                  example: "507f1f77bcf86cd799439060"
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Plan de lecture créé avec succès"
+            plan_id:
+              type: string
+              example: "507f1f77bcf86cd799439060"
       400:
         description: Données invalides
-        content:
-          application/json:
-            schema:
+        schema:
+          type: object
+          properties:
+            errors:
               type: object
-              properties:
-                errors:
-                  type: object
       401:
         description: Token JWT manquant ou invalide
       500:
