@@ -17,33 +17,54 @@ class SimpleReadingPlanModel:
     def create_plan(data, created_by=None):
         """Créer un plan de lecture simple"""
         plan = {
-            "title": data["title"],
-            "subtitle": data["subtitle"],
-            "description": data["description"],
-            "settings": {
-                "duration_months": data["duration_months"],
-                "daily_chapters": data["daily_chapters"],
-                "has_notifications": data.get("has_notifications", True),
-                "auto_save_progress": data.get("auto_save_progress", True)
-            },
-            "content": {
-                "book_focus": data["book_focus"],
-                "reading_schedule": data["reading_schedule"]
-            },
-            "meta": {
-                "emoji": data.get("emoji", "📖"),
-                "color": data.get("color", "#2196F3"),
-                "created_at": datetime.utcnow(),
-                "created_by": ObjectId(created_by) if created_by else None,  # ✅ Ajout
-                "is_template": data.get("is_template", False),  # ✅ False par défaut pour les plans utilisateur
-                "creator_type": "user" if created_by else "system"  # ✅ Spécifier le type
-            },
-            "stats": {
-                "subscribers": 0,
-                "completions": 0,
-                "avg_rating": 0.0
+        "title": data["title"],
+        "subtitle": data["subtitle"],
+        "description": data["description"],
+        "settings": {
+            "duration_months": data["duration_months"],
+            "daily_chapters": data["daily_chapters"],
+            "has_notifications": data.get("has_notifications", True),
+            "auto_save_progress": data.get("auto_save_progress", True),
+            
+            # ✅ Configuration des notifications
+            "notification_settings": {
+                "enabled": data.get("notification_settings", {}).get("enabled", True),
+                "default_time": data.get("notification_settings", {}).get("default_time", "07:00"),
+                "frequency": data.get("notification_settings", {}).get("frequency", "daily"),  # daily, weekly, monthly
+                "recurrence_pattern": {
+                    "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("type", "daily"),  # daily, weekly, monthly, yearly
+                    "interval": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("interval", 1),  # every X days/weeks/months
+                    "days_of_week": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("days_of_week", []),  # [0,1,2,3,4,5,6] pour dim-sam
+                    "day_of_month": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("day_of_month", None),  # pour mensuel
+                    "end_condition": {
+                        "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("type", "never"),  # never, date, count
+                        "end_date": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("end_date", None),
+                        "occurrences": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("occurrences", None)
+                    }
+                },
+                "reminder_types": data.get("notification_settings", {}).get("reminder_types", ["notification"]),  # notification, email, sms
+                "advance_reminders": data.get("notification_settings", {}).get("advance_reminders", []),  # ex: [{"minutes": 15}, {"hours": 1}]
+                "custom_message": data.get("notification_settings", {}).get("custom_message", None)
             }
+        },
+        "content": {
+            "book_focus": data["book_focus"],
+            "reading_schedule": data["reading_schedule"]
+        },
+        "meta": {
+            "emoji": data.get("emoji", "📖"),
+            "color": data.get("color", "#2196F3"),
+            "created_at": datetime.utcnow(),
+            "created_by": ObjectId(created_by) if created_by else None,
+            "is_template": data.get("is_template", False),
+            "creator_type": "user" if created_by else "system"
+        },
+        "stats": {
+            "subscribers": 0,
+            "completions": 0,
+            "avg_rating": 0.0
         }
+    }
         
         result = SimpleReadingPlanModel.get_collection().insert_one(plan)
         
@@ -127,7 +148,7 @@ class UserSimplePlanModel:
     
     @staticmethod
     def create_subscription(data):
-        """Créer une inscription à un plan simple"""
+        """Créer une inscription avec notifications personnalisées"""
         # Vérifier si déjà inscrit
         existing = UserSimplePlanModel.get_collection().find_one({
             "user_id": ObjectId(data["user_id"]),
@@ -148,9 +169,27 @@ class UserSimplePlanModel:
                 "last_reading": None,
                 "completion_percentage": 0
             },
-            "preferences": {
-                "reminder_time": data.get("reminder_time", "07:00"),
-                "reminder_enabled": data.get("reminder_enabled", True)
+            
+            # ✅ Préférences de notification personnalisées
+            "notification_preferences": {
+                "enabled": data.get("notification_preferences", {}).get("enabled", True),
+                "reminder_time": data.get("notification_preferences", {}).get("reminder_time", "07:00"),
+                "frequency": data.get("notification_preferences", {}).get("frequency", "daily"),  # daily, weekly, custom
+                "days_of_week": data.get("notification_preferences", {}).get("days_of_week", [1,2,3,4,5,6,0]),  # tous les jours par défaut
+                "recurrence": {
+                    "type": data.get("notification_preferences", {}).get("recurrence", {}).get("type", "daily"),  # daily, weekly, monthly
+                    "interval": data.get("notification_preferences", {}).get("recurrence", {}).get("interval", 1),
+                    "custom_pattern": data.get("notification_preferences", {}).get("recurrence", {}).get("custom_pattern", None)
+                },
+                "advance_reminders": data.get("notification_preferences", {}).get("advance_reminders", []),
+                "reminder_types": data.get("notification_preferences", {}).get("reminder_types", ["push"]),  # push, email, sms
+                "custom_message": data.get("notification_preferences", {}).get("custom_message", None),
+                "snooze_options": data.get("notification_preferences", {}).get("snooze_options", [5, 15, 30, 60]),  # minutes
+                "quiet_hours": {
+                    "enabled": data.get("notification_preferences", {}).get("quiet_hours", {}).get("enabled", False),
+                    "start_time": data.get("notification_preferences", {}).get("quiet_hours", {}).get("start_time", "22:00"),
+                    "end_time": data.get("notification_preferences", {}).get("quiet_hours", {}).get("end_time", "06:00")
+                }
             },
             "status": "active",
             "created_at": datetime.utcnow()

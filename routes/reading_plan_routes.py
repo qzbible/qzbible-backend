@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 
+from models.reading_plan_model import UserSimplePlanModel
 from schemas.reading_plan_schema import (
     CreateSimplePlanSchema,
     SubscribeSimplePlanSchema,
@@ -304,7 +305,7 @@ def get_simple_plan(plan_id):
 @jwt_required()
 def create_simple_plan():
     """
-    Créer un plan de lecture simple
+    Créer un plan de lecture simple avec configuration des notifications
     ---
     tags:
       - Simple Reading Plans
@@ -319,7 +320,7 @@ def create_simple_plan():
       - in: body
         name: body
         required: true
-        description: Données du plan de lecture
+        description: Données du plan de lecture avec paramètres de notification
         schema:
           type: object
           required:
@@ -334,81 +335,133 @@ def create_simple_plan():
             title:
               type: string
               example: "Psaumes et Proverbes"
-              description: "Titre du plan"
             subtitle:
               type: string
               example: "Méditation quotidienne"
-              description: "Sous-titre du plan"
             description:
               type: string
-              example: "Car l'Éternel donne la sagesse; De sa bouche sortent la connaissance et l'intelligence - Proverbes 2:6"
-              description: "Description ou verset du plan"
+              example: "Car l'Éternel donne la sagesse..."
             duration_months:
               type: integer
               example: 2
-              description: "Durée du plan en mois"
             daily_chapters:
               type: integer
               example: 2
-              description: "Nombre de chapitres par jour"
             book_focus:
               type: array
               items:
                 type: string
               example: ["Psaumes", "Proverbes"]
-              description: "Livres sur lesquels se concentre le plan"
             reading_schedule:
               type: array
               items:
                 type: object
-                required:
-                  - day
-                  - label
-                  - passages
-                  - estimated_time
                 properties:
                   day:
                     type: integer
-                    example: 1
-                    description: "Numéro du jour"
                   label:
                     type: string
-                    example: "Jour 1"
-                    description: "Label du jour"
                   passages:
                     type: array
                     items:
                       type: string
-                    example: ["Genèse 1-3"]
-                    description: "Passages à lire ce jour"
                   estimated_time:
                     type: integer
-                    example: 15
-                    description: "Temps estimé en minutes"
-              description: "Planning de lecture détaillé"
             emoji:
               type: string
               example: "💛"
-              description: "Emoji du plan (optionnel)"
             color:
               type: string
               example: "#FFA726"
-              description: "Couleur du plan (optionnel)"
             has_notifications:
               type: boolean
               example: true
-              description: "Activer les notifications (optionnel, défaut: true)"
             auto_save_progress:
               type: boolean
               example: true
-              description: "Sauvegarde automatique (optionnel, défaut: true)"
             is_template:
               type: boolean
               example: false
-              description: "Marquer comme modèle (optionnel, défaut: false)"
+            notification_settings:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                  description: "Activer les notifications"
+                default_time:
+                  type: string
+                  example: "07:00"
+                  description: "Heure par défaut"
+                frequency:
+                  type: string
+                  enum: [daily, weekly, monthly]
+                  example: "daily"
+                  description: "Fréquence des notifications"
+                recurrence_pattern:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [daily, weekly, monthly, yearly]
+                      example: "daily"
+                    interval:
+                      type: integer
+                      example: 1
+                      description: "Intervalle (tous les X jours/semaines/mois)"
+                    days_of_week:
+                      type: array
+                      items:
+                        type: integer
+                        minimum: 0
+                        maximum: 6
+                      example: [1, 2, 3, 4, 5]
+                      description: "Jours de la semaine (0=dim, 1=lun, ...)"
+                    day_of_month:
+                      type: integer
+                      minimum: 1
+                      maximum: 31
+                      example: 18
+                      description: "Jour du mois (pour récurrence mensuelle)"
+                    end_condition:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          enum: [never, date, count]
+                          example: "never"
+                        end_date:
+                          type: string
+                          format: date
+                          example: "2025-12-31"
+                        occurrences:
+                          type: integer
+                          example: 30
+                reminder_types:
+                  type: array
+                  items:
+                    type: string
+                    enum: [notification, email, sms]
+                  example: ["notification"]
+                advance_reminders:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      minutes:
+                        type: integer
+                        example: 15
+                      hours:
+                        type: integer
+                        example: 1
+                  example: [{"minutes": 15}]
+                custom_message:
+                  type: string
+                  example: "Temps de lecture biblique !"
+                  description: "Message personnalisé"
     responses:
       201:
-        description: Plan créé avec succès et utilisateur automatiquement inscrit
+        description: Plan créé avec succès
         schema:
           type: object
           properties:
@@ -418,42 +471,18 @@ def create_simple_plan():
             plan_id:
               type: string
               example: "507f1f77bcf86cd799439060"
-              description: "ID du plan créé"
             auto_subscribed:
               type: boolean
               example: true
-              description: "Indique si l'utilisateur a été automatiquement inscrit"
             user_plan_id:
               type: string
               example: "507f1f77bcf86cd799439061"
-              description: "ID de l'inscription utilisateur au plan"
       400:
         description: Données invalides
-        schema:
-          type: object
-          properties:
-            errors:
-              type: object
-              description: "Détail des erreurs de validation"
-              example:
-                title: ["Ce champ est requis"]
-                duration_months: ["Doit être entre 1 et 12"]
       401:
         description: Token JWT manquant ou invalide
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Token JWT manquant ou invalide"
       500:
         description: Erreur serveur
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Erreur serveur : détail de l'erreur"
     """
     try:
         data = request.get_json()
@@ -489,7 +518,7 @@ def create_simple_plan():
 @jwt_required()
 def start_simple_plan(plan_id):
     """
-    Commencer un plan de lecture simple
+    Commencer un plan avec préférences de notification personnalisées
     ---
     tags:
       - Simple Reading Plans
@@ -499,32 +528,101 @@ def start_simple_plan(plan_id):
         required: true
         schema:
           type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
       - in: path
         name: plan_id
         required: true
         schema:
           type: string
-        description: ID du plan à commencer
-        example: "69210f9495ba1d08b3e77a45"
       - in: body
         name: body
         required: false
-        description: Préférences optionnelles (peut être vide)
+        description: Préférences de notification personnalisées
         schema:
           type: object
           properties:
             reminder_time:
               type: string
               example: "07:00"
-              description: "Heure de rappel quotidien (format HH:MM)"
-              default: "07:00"
             reminder_enabled:
               type: boolean
               example: true
-              description: "Activer les rappels"
-              default: true
+            notification_preferences:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                reminder_time:
+                  type: string
+                  example: "08:00"
+                  description: "Heure de rappel personnalisée"
+                frequency:
+                  type: string
+                  enum: [daily, weekly, custom]
+                  example: "daily"
+                days_of_week:
+                  type: array
+                  items:
+                    type: integer
+                    minimum: 0
+                    maximum: 6
+                  example: [1, 2, 3, 4, 5, 6]
+                  description: "Jours actifs (lun-sam)"
+                recurrence:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [daily, weekly, monthly]
+                      example: "daily"
+                    interval:
+                      type: integer
+                      example: 1
+                      description: "Tous les X jours/semaines"
+                    custom_pattern:
+                      type: string
+                      example: "Tous les matins sauf dimanche"
+                advance_reminders:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      minutes:
+                        type: integer
+                      hours:
+                        type: integer
+                  example: [{"minutes": 15}, {"hours": 1}]
+                  description: "Rappels en avance"
+                reminder_types:
+                  type: array
+                  items:
+                    type: string
+                    enum: [push, email, sms]
+                  example: ["push", "email"]
+                custom_message:
+                  type: string
+                  example: "Il est temps de lire la Bible !"
+                snooze_options:
+                  type: array
+                  items:
+                    type: integer
+                  example: [5, 15, 30]
+                  description: "Options de report en minutes"
+                quiet_hours:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    start_time:
+                      type: string
+                      example: "22:00"
+                      description: "Début des heures de silence"
+                    end_time:
+                      type: string
+                      example: "06:00"
+                      description: "Fin des heures de silence"
+                  description: "Heures de silence (pas de notifications)"
     responses:
       201:
         description: Plan commencé avec succès
@@ -864,3 +962,140 @@ def search_simple_plans():
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
 
  
+@reading_plan_bp.route("/user-plan/<user_plan_id>/notification-settings", methods=["PUT"])
+@jwt_required()
+def update_notification_settings(user_plan_id):
+    """
+    Mettre à jour les paramètres de notification d'un plan utilisateur
+    ---
+    tags:
+      - Simple Reading Plans
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+        description: Token JWT de l'utilisateur
+        example: "Bearer votre.jwt.token"
+      - in: path
+        name: user_plan_id
+        required: true
+        schema:
+          type: string
+        description: ID du plan utilisateur
+        example: "507f1f77bcf86cd799439061"
+      - in: body
+        name: body
+        required: true
+        description: Nouveaux paramètres de notification
+        schema:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              example: true
+              description: "Activer/désactiver les notifications"
+            reminder_time:
+              type: string
+              example: "08:30"
+              description: "Nouvelle heure de rappel"
+            frequency:
+              type: string
+              enum: [daily, weekly, custom]
+              example: "weekly"
+              description: "Fréquence des notifications"
+            days_of_week:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+                maximum: 6
+              example: [1, 3, 5]
+              description: "Jours spécifiques (lun, mer, ven)"
+            recurrence:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [daily, weekly, monthly]
+                  example: "weekly"
+                interval:
+                  type: integer
+                  example: 2
+                  description: "Toutes les 2 semaines"
+                custom_pattern:
+                  type: string
+                  example: "Tous les 3 jours"
+            advance_reminders:
+              type: array
+              items:
+                type: object
+                properties:
+                  minutes:
+                    type: integer
+                    example: 30
+                  hours:
+                    type: integer
+                    example: 2
+              example: [{"minutes": 30}, {"hours": 2}]
+            reminder_types:
+              type: array
+              items:
+                type: string
+                enum: [push, email, sms]
+              example: ["push", "email"]
+            custom_message:
+              type: string
+              example: "Moment de méditation biblique !"
+              description: "Message personnalisé pour les rappels"
+            snooze_options:
+              type: array
+              items:
+                type: integer
+              example: [10, 30, 60]
+              description: "Options de report (minutes)"
+            quiet_hours:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                start_time:
+                  type: string
+                  example: "21:30"
+                end_time:
+                  type: string
+                  example: "07:00"
+              description: "Plage horaire sans notifications"
+    responses:
+      200:
+        description: Paramètres mis à jour avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Paramètres de notification mis à jour"
+      404:
+        description: Plan utilisateur non trouvé
+      401:
+        description: Token JWT manquant ou invalide
+      500:
+        description: Erreur serveur
+    """
+    try:
+        data = request.get_json()
+        
+        result = UserSimplePlanModel.get_collection().update_one(
+            {"_id": ObjectId(user_plan_id)},
+            {"$set": {"notification_preferences": data}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"message": "Plan non trouvé ou aucune modification"}), 404
+        
+        return jsonify({"message": "Paramètres de notification mis à jour"}), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur : {str(e)}"}), 500
