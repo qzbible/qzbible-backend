@@ -14,13 +14,12 @@ class SimpleReadingPlanModel:
         return mongo.db.simple_reading_plans
     
     @staticmethod
-    def create_plan(data):
+    def create_plan(data, created_by=None):
         """Créer un plan de lecture simple"""
         plan = {
             "title": data["title"],
             "subtitle": data["subtitle"],
             "description": data["description"],
-            "user_id" : data["user_id"],
             "settings": {
                 "duration_months": data["duration_months"],
                 "daily_chapters": data["daily_chapters"],
@@ -35,8 +34,9 @@ class SimpleReadingPlanModel:
                 "emoji": data.get("emoji", "📖"),
                 "color": data.get("color", "#2196F3"),
                 "created_at": datetime.utcnow(),
-                "is_template": data.get("is_template", True),
-                "creator_type": data.get("creator_type", "system")
+                "created_by": ObjectId(created_by) if created_by else None,  # ✅ Ajout
+                "is_template": data.get("is_template", False),  # ✅ False par défaut pour les plans utilisateur
+                "creator_type": "user" if created_by else "system"  # ✅ Spécifier le type
             },
             "stats": {
                 "subscribers": 0,

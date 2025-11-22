@@ -361,21 +361,30 @@ def create_simple_plan():
               type: array
               items:
                 type: object
+                required:
+                  - day
+                  - label
+                  - passages
+                  - estimated_time
                 properties:
                   day:
                     type: integer
                     example: 1
+                    description: "Numéro du jour"
                   label:
                     type: string
                     example: "Jour 1"
+                    description: "Label du jour"
                   passages:
                     type: array
                     items:
                       type: string
                     example: ["Genèse 1-3"]
+                    description: "Passages à lire ce jour"
                   estimated_time:
                     type: integer
                     example: 15
+                    description: "Temps estimé en minutes"
               description: "Planning de lecture détaillé"
             emoji:
               type: string
@@ -385,9 +394,21 @@ def create_simple_plan():
               type: string
               example: "#FFA726"
               description: "Couleur du plan (optionnel)"
+            has_notifications:
+              type: boolean
+              example: true
+              description: "Activer les notifications (optionnel, défaut: true)"
+            auto_save_progress:
+              type: boolean
+              example: true
+              description: "Sauvegarde automatique (optionnel, défaut: true)"
+            is_template:
+              type: boolean
+              example: false
+              description: "Marquer comme modèle (optionnel, défaut: false)"
     responses:
       201:
-        description: Plan créé avec succès
+        description: Plan créé avec succès et utilisateur automatiquement inscrit
         schema:
           type: object
           properties:
@@ -397,6 +418,15 @@ def create_simple_plan():
             plan_id:
               type: string
               example: "507f1f77bcf86cd799439060"
+              description: "ID du plan créé"
+            auto_subscribed:
+              type: boolean
+              example: true
+              description: "Indique si l'utilisateur a été automatiquement inscrit"
+            user_plan_id:
+              type: string
+              example: "507f1f77bcf86cd799439061"
+              description: "ID de l'inscription utilisateur au plan"
       400:
         description: Données invalides
         schema:
@@ -404,21 +434,51 @@ def create_simple_plan():
           properties:
             errors:
               type: object
+              description: "Détail des erreurs de validation"
+              example:
+                title: ["Ce champ est requis"]
+                duration_months: ["Doit être entre 1 et 12"]
       401:
         description: Token JWT manquant ou invalide
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Token JWT manquant ou invalide"
       500:
         description: Erreur serveur
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Erreur serveur : détail de l'erreur"
     """
     try:
         data = request.get_json()
+        current_user_id = get_jwt_identity()
         
         # Validation des données
         errors = CreateSimplePlanSchema().validate(data)
         if errors:
             return jsonify({"errors": errors}), 400
-        current_user_id = get_jwt_identity()
-        data['user_id'] = current_user_id
-        result, status = create_simple_plan_service(data)
+        
+        # Créer le plan en spécifiant le créateur
+        result, status = create_simple_plan_service(data, current_user_id)
+        
+        if status == 201:
+            # Automatiquement inscrire le créateur au plan
+            plan_id = result["plan_id"]
+            subscription_result, _ = subscribe_to_simple_plan_service(
+                plan_id, 
+                current_user_id, 
+                {"reminder_time": "07:00", "reminder_enabled": True}
+            )
+            
+            # Ajouter l'info d'inscription dans la réponse
+            result["auto_subscribed"] = True
+            result["user_plan_id"] = subscription_result.get("user_plan_id")
         
         return jsonify(result), status
         
@@ -517,72 +577,47 @@ def get_my_simple_plans():
         schema:
           type: string
         description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
       - in: query
         name: status
         schema:
           type: string
           enum: [active, completed, paused]
         description: Filtrer par statut
-        example: "active"
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum: [created, subscribed, all]
+          default: all
+        description: Type de plans (créés par moi, auxquels je suis inscrit, ou tous)
     responses:
       200:
         description: Plans récupérés avec succès
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Vos plans récupérés avec succès"
-                data:
-                  type: array
-                  items:
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  plan_details:
                     type: object
                     properties:
-                      _id:
-                        type: string
-                      user_id:
-                        type: string
-                      plan_id:
-                        type: string
-                      progress:
-                        type: object
-                        properties:
-                          current_day:
-                            type: integer
-                          completed_days:
-                            type: array
-                            items:
-                              type: integer
-                          completion_percentage:
-                            type: number
-                      status:
-                        type: string
-                      plan_details:
-                        type: object
-                        properties:
-                          title:
-                            type: string
-                          subtitle:
-                            type: string
-                          emoji:
-                            type: string
-                          color:
-                            type: string
-                total:
-                  type: integer
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
+                      is_owner:
+                        type: boolean
+                        description: "true si l'utilisateur a créé ce plan"
+            total:
+              type: integer
     """
     try:
         current_user_id = get_jwt_identity()
         status = request.args.get("status")
+        filter_type = request.args.get("type", "all")  # created, subscribed, all
         
-        plans = get_user_simple_plans_service(current_user_id, status)
+        plans = get_user_simple_plans_service(current_user_id, status, filter_type)
         
         return jsonify({
             "message": "Vos plans récupérés avec succès",
