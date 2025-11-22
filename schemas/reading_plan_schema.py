@@ -18,8 +18,13 @@ class CreateSimplePlanSchema(Schema):
     daily_chapters = fields.Integer(required=True, validate=validate.Range(min=1, max=10))
     book_focus = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
     reading_schedule = fields.List(fields.Nested(ReadingScheduleItemSchema), required=True)
+    
+    # ✅ Ajout des champs manquants
     emoji = fields.String(required=False, missing="📖")
     color = fields.String(required=False, missing="#2196F3")
+    has_notifications = fields.Boolean(required=False, missing=True)
+    auto_save_progress = fields.Boolean(required=False, missing=True)
+    is_template = fields.Boolean(required=False, missing=False)
 
 class SubscribeSimplePlanSchema(Schema):
     """Schema pour s'inscrire à un plan simple"""
