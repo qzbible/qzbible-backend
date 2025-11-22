@@ -1,10 +1,11 @@
 # routes/simple_reading_plan.py
 
+import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 
-from models.reading_plan_model import UserSimplePlanModel
+from models.reading_plan_model import SimpleReadingPlanModel, UserSimplePlanModel
 from schemas.reading_plan_schema import (
     CreateSimplePlanSchema,
     SubscribeSimplePlanSchema,
@@ -664,7 +665,7 @@ def start_simple_plan(plan_id):
 @jwt_required()
 def get_my_simple_plans():
     """
-    Récupérer mes plans de lecture simples
+    Récupérer mes plans avec calculs de progression
     ---
     tags:
       - Simple Reading Plans
@@ -674,23 +675,14 @@ def get_my_simple_plans():
         required: true
         schema:
           type: string
-        description: Token JWT de l'utilisateur
       - in: query
         name: status
         schema:
           type: string
           enum: [active, completed, paused]
-        description: Filtrer par statut
-      - in: query
-        name: type
-        schema:
-          type: string
-          enum: [created, subscribed, all]
-          default: all
-        description: Type de plans (créés par moi, auxquels je suis inscrit, ou tous)
     responses:
       200:
-        description: Plans récupérés avec succès
+        description: Plans avec progression récupérés
         schema:
           type: object
           properties:
@@ -701,12 +693,55 @@ def get_my_simple_plans():
               items:
                 type: object
                 properties:
+                  _id:
+                    type: string
                   plan_details:
                     type: object
                     properties:
-                      is_owner:
+                      title:
+                        type: string
+                      subtitle:
+                        type: string
+                      emoji:
+                        type: string
+                      color:
+                        type: string
+                  progression:
+                    type: object
+                    properties:
+                      total_days:
+                        type: integer
+                        example: 40
+                      completed_days:
+                        type: integer
+                        example: 2
+                      remaining_days:
+                        type: integer
+                        example: 38
+                      completion_percentage:
+                        type: number
+                        example: 5.0
+                      current_day:
+                        type: integer
+                        example: 3
+                      is_behind:
                         type: boolean
-                        description: "true si l'utilisateur a créé ce plan"
+                        example: false
+                      days_behind:
+                        type: integer
+                        example: 0
+                      status_label:
+                        type: string
+                        example: "À jour"
+                      status_color:
+                        type: string
+                        example: "#2196F3"
+                      estimated_completion_date:
+                        type: string
+                        example: "2025-01-15"
+                      average_completion_rate:
+                        type: number
+                        example: 0.67
             total:
               type: integer
     """
@@ -1096,6 +1131,167 @@ def update_notification_settings(user_plan_id):
             return jsonify({"message": "Plan non trouvé ou aucune modification"}), 404
         
         return jsonify({"message": "Paramètres de notification mis à jour"}), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur : {str(e)}"}), 500
+    
+
+@reading_plan_bp.route("/user-plan/<user_plan_id>", methods=["DELETE"])
+@jwt_required()
+def delete_user_plan(user_plan_id):
+    """
+    Supprimer définitivement un plan utilisateur
+    ---
+    tags:
+      - Simple Reading Plans
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user_plan_id
+        required: true
+        schema:
+          type: string
+    responses:
+      200:
+        description: Plan supprimé avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Plan supprimé avec succès"
+      404:
+        description: Plan non trouvé
+      401:
+        description: Token JWT invalide
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Vérifier que le plan appartient à l'utilisateur
+        user_plan = UserSimplePlanModel.get_collection().find_one({
+            "_id": ObjectId(user_plan_id),
+            "user_id": ObjectId(current_user_id)
+        })
+        
+        if not user_plan:
+            return jsonify({"message": "Plan non trouvé ou accès refusé"}), 404
+        
+        # Supprimer le plan
+        result = UserSimplePlanModel.get_collection().delete_one({
+            "_id": ObjectId(user_plan_id)
+        })
+        
+        if result.deleted_count == 0:
+            return jsonify({"message": "Erreur lors de la suppression"}), 500
+        
+        # Décrémenter les stats du plan principal
+        SimpleReadingPlanModel.get_collection().update_one(
+            {"_id": ObjectId(user_plan["plan_id"])},
+            {"$inc": {"stats.subscribers": -1}}
+        )
+        
+        return jsonify({
+            "message": "Plan supprimé avec succès"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur : {str(e)}"}), 500
+    
+
+@reading_plan_bp.route("/user-plan/<user_plan_id>/pause", methods=["POST"])
+@jwt_required()
+def pause_plan(user_plan_id):
+    """
+    Mettre en pause un plan de lecture
+    ---
+    tags:
+      - Simple Reading Plans
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user_plan_id
+        required: true
+        schema:
+          type: string
+    responses:
+      200:
+        description: Plan mis en pause avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Plan mis en pause avec succès"
+            status:
+              type: string
+              example: "paused"
+      404:
+        description: Plan non trouvé
+      401:
+        description: Token JWT invalide
+    """
+    try:
+        result = UserSimplePlanModel.get_collection().update_one(
+            {"_id": ObjectId(user_plan_id)},
+            {"$set": {"status": "paused", "paused_at": datetime.utcnow()}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"message": "Plan non trouvé"}), 404
+        
+        return jsonify({
+            "message": "Plan mis en pause avec succès",
+            "status": "paused"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"message": f"Erreur : {str(e)}"}), 500
+
+@reading_plan_bp.route("/user-plan/<user_plan_id>/resume", methods=["POST"])
+@jwt_required()
+def resume_plan(user_plan_id):
+    """
+    Reprendre un plan en pause
+    ---
+    tags:
+      - Simple Reading Plans
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user_plan_id
+        required: true
+        schema:
+          type: string
+    responses:
+      200:
+        description: Plan repris avec succès
+    """
+    try:
+        result = UserSimplePlanModel.get_collection().update_one(
+            {"_id": ObjectId(user_plan_id)},
+            {"$set": {"status": "active"}, "$unset": {"paused_at": ""}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"message": "Plan non trouvé"}), 404
+        
+        return jsonify({
+            "message": "Plan repris avec succès",
+            "status": "active"
+        }), 200
         
     except Exception as e:
         return jsonify({"message": f"Erreur : {str(e)}"}), 500

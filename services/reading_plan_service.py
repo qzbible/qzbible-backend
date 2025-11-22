@@ -1,5 +1,6 @@
 # services/simple_reading_plan_service.py
 
+import datetime
 from bson import ObjectId
 
 from models.reading_plan_model import SimpleReadingPlanModel, UserSimplePlanModel
@@ -79,6 +80,70 @@ def subscribe_to_simple_plan_service(plan_id, user_id, subscription_data):
     result, status = UserSimplePlanModel.create_subscription(data)
     return result, status
 
+
+def get_user_simple_plans_service(user_id, status=None):
+    """Récupérer les plans avec calculs de progression"""
+    user_plans = UserSimplePlanModel.get_user_plans(user_id, status)
+    
+    for user_plan in user_plans:
+        # Récupérer le plan principal pour les calculs
+        plan = SimpleReadingPlanModel.get_plan_by_id(user_plan["plan_id"])
+        
+        if plan:
+            total_days = len(plan["content"]["reading_schedule"])
+            completed_days = len(user_plan["progress"]["completed_days"])
+            current_day = user_plan["progress"]["current_day"]
+            
+            # ✅ Calculs de progression
+            progression_stats = {
+                "total_days": total_days,
+                "completed_days": completed_days,
+                "remaining_days": max(0, total_days - completed_days),
+                "completion_percentage": round((completed_days / total_days) * 100, 1) if total_days > 0 else 0,
+                "current_day": current_day,
+                "is_behind": current_day > completed_days + 1,  # En retard ?
+                "days_behind": max(0, current_day - completed_days - 1),
+                
+                # Temps estimé
+                "estimated_completion_date": None,
+                "days_since_start": None,
+                "average_completion_rate": None
+            }
+            
+            # Calcul des dates
+            if user_plan["progress"].get("started_at"):
+                started_at = user_plan["progress"]["started_at"]
+                days_since_start = (datetime.utcnow() - started_at).days + 1
+                progression_stats["days_since_start"] = days_since_start
+                
+                # Taux de completion moyen
+                if days_since_start > 0:
+                    avg_rate = completed_days / days_since_start
+                    progression_stats["average_completion_rate"] = round(avg_rate, 2)
+                    
+                    # Date estimée de fin (si on continue au même rythme)
+                    if avg_rate > 0:
+                        remaining_days_needed = (total_days - completed_days) / avg_rate
+                        estimated_completion = datetime.utcnow() + timedelta(days=remaining_days_needed)
+                        progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
+            
+            # Statut de progression
+            if progression_stats["completion_percentage"] == 100:
+                progression_stats["status_label"] = "Terminé"
+                progression_stats["status_color"] = "#4CAF50"
+            elif progression_stats["is_behind"]:
+                progression_stats["status_label"] = f"En retard de {progression_stats['days_behind']} jour(s)"
+                progression_stats["status_color"] = "#FF9800"
+            elif completed_days >= current_day - 1:
+                progression_stats["status_label"] = "À jour"
+                progression_stats["status_color"] = "#2196F3"
+            else:
+                progression_stats["status_label"] = "En avance"
+                progression_stats["status_color"] = "#4CAF50"
+            
+            user_plan["progression"] = progression_stats
+    
+    return user_plans
 
 def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
     """
