@@ -107,7 +107,7 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
                     "user_id": str(user_subscription["user_id"]),
                     "plan_id": str(user_subscription["plan_id"]),
                     "progress": user_subscription["progress"],
-                    "notification_preferences": user_subscription["notification_preferences"],
+                    "notification_preferences": user_subscription.get('notification_preferences', None),
                     "status": user_subscription["status"],
                     "created_at": user_subscription["created_at"],
                     "plan_details": {
