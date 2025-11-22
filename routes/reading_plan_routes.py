@@ -1,6 +1,6 @@
 # routes/simple_reading_plan.py
 
-import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId

@@ -1,6 +1,6 @@
 # services/simple_reading_plan_service.py
 
-import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 
 from models.reading_plan_model import SimpleReadingPlanModel, UserSimplePlanModel
