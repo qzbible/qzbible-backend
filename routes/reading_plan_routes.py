@@ -416,7 +416,8 @@ def create_simple_plan():
         errors = CreateSimplePlanSchema().validate(data)
         if errors:
             return jsonify({"errors": errors}), 400
-        
+        current_user_id = get_jwt_identity()
+        data['user_id'] = current_user_id
         result, status = create_simple_plan_service(data)
         
         return jsonify(result), status

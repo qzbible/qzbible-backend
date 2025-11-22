@@ -20,6 +20,7 @@ class SimpleReadingPlanModel:
             "title": data["title"],
             "subtitle": data["subtitle"],
             "description": data["description"],
+            "user_id" : data["user_id"],
             "settings": {
                 "duration_months": data["duration_months"],
                 "daily_chapters": data["daily_chapters"],
