@@ -674,6 +674,7 @@ def get_my_simple_plans():
         required: true
         schema:
           type: string
+        description: Token JWT de l'utilisateur
       - in: query
         name: status
         schema:
@@ -687,13 +688,34 @@ def get_my_simple_plans():
           enum: [created, subscribed, all]
           default: all
         description: Type de plans (créés par moi, auxquels je suis inscrit, ou tous)
+    responses:
+      200:
+        description: Plans récupérés avec succès
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  plan_details:
+                    type: object
+                    properties:
+                      is_owner:
+                        type: boolean
+                        description: "true si l'utilisateur a créé ce plan"
+            total:
+              type: integer
     """
     try:
         current_user_id = get_jwt_identity()
         status = request.args.get("status")
-        # ✅ Correction : enlever le paramètre filter_type qui n'existe pas
+        filter_type = request.args.get("type", "all")  # created, subscribed, all
         
-        plans = get_user_simple_plans_service(current_user_id, status)
+        plans = get_user_simple_plans_service(current_user_id, status, filter_type)
         
         return jsonify({
             "message": "Vos plans récupérés avec succès",
