@@ -6,11 +6,11 @@ from marshmallow import Schema, fields, validate
 # ✅ Définir d'abord ReadingScheduleItemSchema
 class ReadingScheduleItemSchema(Schema):
     """Schema pour un élément du planning de lecture"""
-    day = fields.Integer(required=True, validate=validate.Range(min=1))
-    label = fields.String(required=True)
-    passages = fields.List(fields.String(), required=True)
-    estimated_time = fields.Integer(required=True, validate=validate.Range(min=1))
-
+    day = fields.Integer(required=True, validate=validate.Range(min=0))  # ✅ Accepter 0
+    label = fields.String(required=True, validate=validate.Length(min=1))
+    passages = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
+    estimated_time = fields.Integer(required=True, validate=validate.Range(min=0))  # ✅ Accepter 0
+    
 class NotificationRecurrenceSchema(Schema):
     """Schema pour la récurrence des notifications"""
     type = fields.String(validate=validate.OneOf(["daily", "weekly", "monthly", "yearly"]), missing="daily")
