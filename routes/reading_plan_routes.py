@@ -507,36 +507,36 @@ def start_simple_plan(plan_id):
         schema:
           type: string
         description: ID du plan à commencer
-        example: "507f1f77bcf86cd799439060"
-    requestBody:
-      required: false
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              reminder_time:
-                type: string
-                example: "07:00"
-                description: "Heure de rappel quotidien (format HH:MM)"
-              reminder_enabled:
-                type: boolean
-                example: true
-                description: "Activer les rappels"
+        example: "69210f9495ba1d08b3e77a45"
+      - in: body
+        name: body
+        required: false
+        description: Préférences optionnelles (peut être vide)
+        schema:
+          type: object
+          properties:
+            reminder_time:
+              type: string
+              example: "07:00"
+              description: "Heure de rappel quotidien (format HH:MM)"
+              default: "07:00"
+            reminder_enabled:
+              type: boolean
+              example: true
+              description: "Activer les rappels"
+              default: true
     responses:
       201:
         description: Plan commencé avec succès
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Inscription au plan réussie"
-                user_plan_id:
-                  type: string
-                  example: "507f1f77bcf86cd799439061"
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Inscription au plan réussie"
+            user_plan_id:
+              type: string
+              example: "507f1f77bcf86cd799439061"
       400:
         description: Déjà inscrit ou données invalides
       404:
@@ -550,8 +550,8 @@ def start_simple_plan(plan_id):
         current_user_id = get_jwt_identity()
         data = request.get_json() or {}
         
-        # Validation des données
-        errors = SubscribeSimplePlanSchema().validate({**data, "plan_id": plan_id})
+        # ✅ Validation sans plan_id
+        errors = SubscribeSimplePlanSchema().validate(data)
         if errors:
             return jsonify({"errors": errors}), 400
         

@@ -28,7 +28,7 @@ class CreateSimplePlanSchema(Schema):
 
 class SubscribeSimplePlanSchema(Schema):
     """Schema pour s'inscrire à un plan simple"""
-    plan_id = fields.String(required=True)
+    # ✅ Retirer plan_id car il vient de l'URL, pas du body
     reminder_time = fields.String(required=False, missing="07:00")
     reminder_enabled = fields.Boolean(required=False, missing=True)
 
