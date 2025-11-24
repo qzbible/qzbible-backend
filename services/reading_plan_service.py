@@ -1,6 +1,6 @@
 # services/simple_reading_plan_service.py
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from models.reading_plan_model import SimpleReadingPlanModel, UserSimplePlanModel
@@ -145,16 +145,74 @@ def get_user_simple_plans_service(user_id, status=None):
     
     return user_plans
 
+# def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
+#     """
+#     Récupérer les plans simples d'un utilisateur
+#     filter_type: 'created', 'subscribed', 'all'
+#     """
+#     result = []
+    
+#     if filter_type in ["created", "all"]:
+#         # 1. Plans créés par l'utilisateur
+#         from models.reading_plan_model import SimpleReadingPlanModel
+        
+#         plan_filters = {"meta.created_by": ObjectId(user_id)}
+#         created_plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
+        
+#         for plan in created_plans:
+#             # Récupérer l'inscription
+#             user_subscription = UserSimplePlanModel.get_collection().find_one({
+#                 "user_id": ObjectId(user_id),
+#                 "plan_id": ObjectId(plan["_id"])
+#             })
+            
+#             if user_subscription and (not status or user_subscription.get("status") == status):
+#                 plan_item = {
+#                     "_id": str(user_subscription["_id"]),
+#                     "user_id": str(user_subscription["user_id"]),
+#                     "plan_id": str(user_subscription["plan_id"]),
+#                     "progress": user_subscription["progress"],
+#                     "notification_preferences": user_subscription.get('notification_preferences', None),
+#                     "status": user_subscription["status"],
+#                     "created_at": user_subscription["created_at"],
+#                     "plan_details": {
+#                         "title": plan["title"],
+#                         "subtitle": plan["subtitle"],
+#                         "emoji": plan["meta"]["emoji"],
+#                         "color": plan["meta"]["color"],
+#                         "is_owner": True
+#                     }
+#                 }
+#                 result.append(plan_item)
+    
+#     if filter_type in ["subscribed", "all"]:
+#         # 2. Plans auxquels l'utilisateur est inscrit (mais qu'il n'a pas créés)
+#         subscriptions = UserSimplePlanModel.get_user_plans(user_id, status)
+        
+#         for subscription in subscriptions:
+#             # Vérifier si ce n'est pas un plan qu'il a créé (pour éviter les doublons)
+#             plan_id = subscription["plan_id"]
+#             from models.reading_plan_model import SimpleReadingPlanModel
+#             plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
+            
+#             if plan and str(plan.get("meta", {}).get("created_by", "")) != user_id:
+#                 subscription["plan_details"]["is_owner"] = False
+#                 result.append(subscription)
+    
+#     return result
+
+
 def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
     """
-    Récupérer les plans simples d'un utilisateur
+    Récupérer les plans simples d'un utilisateur avec calculs de progression
     filter_type: 'created', 'subscribed', 'all'
     """
+    from datetime import datetime, timezone, timedelta
     result = []
     
     if filter_type in ["created", "all"]:
         # 1. Plans créés par l'utilisateur
-        from models.reading_plan_model import SimpleReadingPlanModel
+        from models.reading_plan_model import SimpleReadingPlanModel  # ✅ Correction : bon import
         
         plan_filters = {"meta.created_by": ObjectId(user_id)}
         created_plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
@@ -172,7 +230,7 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
                     "user_id": str(user_subscription["user_id"]),
                     "plan_id": str(user_subscription["plan_id"]),
                     "progress": user_subscription["progress"],
-                    "notification_preferences": user_subscription.get('notification_preferences', None),
+                    "notification_preferences": user_subscription.get('notification_preferences', {}),  # ✅ Correction : dict par défaut
                     "status": user_subscription["status"],
                     "created_at": user_subscription["created_at"],
                     "plan_details": {
@@ -183,6 +241,9 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
                         "is_owner": True
                     }
                 }
+                
+                # ✅ Ajouter les calculs de progression
+                plan_item = add_progression_calculations(plan_item, plan)
                 result.append(plan_item)
     
     if filter_type in ["subscribed", "all"]:
@@ -192,14 +253,76 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
         for subscription in subscriptions:
             # Vérifier si ce n'est pas un plan qu'il a créé (pour éviter les doublons)
             plan_id = subscription["plan_id"]
-            from models.reading_plan_model import SimpleReadingPlanModel
+            from models.reading_plan_model import SimpleReadingPlanModel  # ✅ Correction : bon import
             plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
             
             if plan and str(plan.get("meta", {}).get("created_by", "")) != user_id:
                 subscription["plan_details"]["is_owner"] = False
+                
+                # ✅ Ajouter les calculs de progression
+                subscription = add_progression_calculations(subscription, plan)
                 result.append(subscription)
     
     return result
+
+def add_progression_calculations(user_plan, plan):
+    """Ajouter les calculs de progression à un plan utilisateur"""
+    from datetime import datetime, timezone, timedelta
+    
+    if not plan or not plan.get("content", {}).get("reading_schedule"):
+        return user_plan
+    
+    total_days = len(plan["content"]["reading_schedule"])
+    completed_days = len(user_plan["progress"].get("completed_days", []))
+    current_day = user_plan["progress"].get("current_day", 1)
+    
+    # Calculs de progression
+    progression_stats = {
+        "total_days": total_days,
+        "completed_days": completed_days,
+        "remaining_days": max(0, total_days - completed_days),
+        "completion_percentage": round((completed_days / total_days) * 100, 1) if total_days > 0 else 0,
+        "current_day": current_day,
+        "is_behind": current_day > completed_days + 1,
+        "days_behind": max(0, current_day - completed_days - 1),
+        "estimated_completion_date": None,
+        "days_since_start": None,
+        "average_completion_rate": None
+    }
+    
+    # Calcul des dates
+    if user_plan["progress"].get("started_at"):
+        started_at = user_plan["progress"]["started_at"]
+        days_since_start = (datetime.now(timezone.utc) - started_at).days + 1
+        progression_stats["days_since_start"] = days_since_start
+        
+        # Taux de completion moyen
+        if days_since_start > 0:
+            avg_rate = completed_days / days_since_start
+            progression_stats["average_completion_rate"] = round(avg_rate, 2)
+            
+            # Date estimée de fin
+            if avg_rate > 0:
+                remaining_days_needed = (total_days - completed_days) / avg_rate
+                estimated_completion = datetime.now(timezone.utc) + timedelta(days=remaining_days_needed)
+                progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
+    
+    # Statut de progression
+    if progression_stats["completion_percentage"] == 100:
+        progression_stats["status_label"] = "Terminé"
+        progression_stats["status_color"] = "#4CAF50"
+    elif progression_stats["is_behind"]:
+        progression_stats["status_label"] = f"En retard de {progression_stats['days_behind']} jour(s)"
+        progression_stats["status_color"] = "#FF9800"
+    elif completed_days >= current_day - 1:
+        progression_stats["status_label"] = "À jour"
+        progression_stats["status_color"] = "#2196F3"
+    else:
+        progression_stats["status_label"] = "En avance"
+        progression_stats["status_color"] = "#4CAF50"
+    
+    user_plan["progression"] = progression_stats
+    return user_plan
 
 def mark_day_completed_service(user_plan_id, day):
     """Marquer un jour comme complété"""
