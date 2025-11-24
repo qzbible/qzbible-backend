@@ -266,7 +266,7 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
     return result
 
 def add_progression_calculations(user_plan, plan):
-    """Ajouter les calculs de progression à un plan utilisateur"""
+    """Ajouter les calculs de progression avec gestion des timezones"""
     from datetime import datetime, timezone, timedelta
     
     if not plan or not plan.get("content", {}).get("reading_schedule"):
@@ -290,10 +290,18 @@ def add_progression_calculations(user_plan, plan):
         "average_completion_rate": None
     }
     
-    # Calcul des dates
+    # ✅ Gestion correcte des timezones
     if user_plan["progress"].get("started_at"):
         started_at = user_plan["progress"]["started_at"]
-        days_since_start = (datetime.now(timezone.utc) - started_at).days + 1
+        
+        # Vérifier si la date a une timezone
+        if started_at.tzinfo is None:
+            # Date naive : ajouter UTC timezone
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        
+        # Maintenant on peut calculer la différence
+        now = datetime.now(timezone.utc)
+        days_since_start = (now - started_at).days + 1
         progression_stats["days_since_start"] = days_since_start
         
         # Taux de completion moyen
@@ -304,7 +312,7 @@ def add_progression_calculations(user_plan, plan):
             # Date estimée de fin
             if avg_rate > 0:
                 remaining_days_needed = (total_days - completed_days) / avg_rate
-                estimated_completion = datetime.now(timezone.utc) + timedelta(days=remaining_days_needed)
+                estimated_completion = now + timedelta(days=remaining_days_needed)
                 progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
     
     # Statut de progression
