@@ -266,7 +266,7 @@ def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
     return result
 
 def add_progression_calculations(user_plan, plan):
-    """Ajouter les calculs de progression avec gestion des timezones"""
+    """Calcul automatique de progression basé sur la date système et la configuration"""
     from datetime import datetime, timezone, timedelta
     
     if not plan or not plan.get("content", {}).get("reading_schedule"):
@@ -274,63 +274,97 @@ def add_progression_calculations(user_plan, plan):
     
     total_days = len(plan["content"]["reading_schedule"])
     completed_days = len(user_plan["progress"].get("completed_days", []))
-    current_day = user_plan["progress"].get("current_day", 1)
     
-    # Calculs de progression
+    # ✅ Calcul automatique du jour attendu selon la date système
+    if user_plan["progress"].get("started_at"):
+        started_at = user_plan["progress"]["started_at"]
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        
+        now = datetime.now(timezone.utc)
+        days_since_start = (now - started_at).days + 1
+        
+        # Le jour où l'utilisateur DEVRAIT être selon la configuration
+        expected_current_day = min(days_since_start, total_days)
+        
+        # Gestion de la fréquence (si c'est pas quotidien)
+        frequency = user_plan.get("notification_preferences", {}).get("frequency", "daily")
+        days_of_week = user_plan.get("notification_preferences", {}).get("days_of_week", [0,1,2,3,4,5,6])
+        
+        if frequency == "weekly" or len(days_of_week) < 7:
+            # Calculer combien de jours "actifs" se sont écoulés
+            expected_current_day = calculate_active_days(started_at, now, days_of_week)
+    else:
+        expected_current_day = 1
+        days_since_start = 1
+    
+    # Calculs de progression basés sur la réalité
     progression_stats = {
         "total_days": total_days,
         "completed_days": completed_days,
         "remaining_days": max(0, total_days - completed_days),
         "completion_percentage": round((completed_days / total_days) * 100, 1) if total_days > 0 else 0,
-        "current_day": current_day,
-        "is_behind": current_day > completed_days + 1,
-        "days_behind": max(0, current_day - completed_days - 1),
-        "estimated_completion_date": None,
-        "days_since_start": None,
-        "average_completion_rate": None
+        
+        # ✅ Jour attendu calculé automatiquement
+        "expected_current_day": expected_current_day,
+        "days_since_start": days_since_start,
+        
+        # ✅ Nouveau calcul du retard basé sur l'attendu vs réalisé
+        "is_behind": completed_days < expected_current_day,
+        "days_behind": max(0, expected_current_day - completed_days),
+        "days_ahead": max(0, completed_days - expected_current_day),
+        
+        # Prédictions
+        "average_completion_rate": None,
+        "estimated_completion_date": None
     }
     
-    # ✅ Gestion correcte des timezones
-    if user_plan["progress"].get("started_at"):
-        started_at = user_plan["progress"]["started_at"]
+    # Taux de completion réel
+    if days_since_start > 0:
+        avg_rate = completed_days / days_since_start
+        progression_stats["average_completion_rate"] = round(avg_rate, 2)
         
-        # Vérifier si la date a une timezone
-        if started_at.tzinfo is None:
-            # Date naive : ajouter UTC timezone
-            started_at = started_at.replace(tzinfo=timezone.utc)
-        
-        # Maintenant on peut calculer la différence
-        now = datetime.now(timezone.utc)
-        days_since_start = (now - started_at).days + 1
-        progression_stats["days_since_start"] = days_since_start
-        
-        # Taux de completion moyen
-        if days_since_start > 0:
-            avg_rate = completed_days / days_since_start
-            progression_stats["average_completion_rate"] = round(avg_rate, 2)
-            
-            # Date estimée de fin
-            if avg_rate > 0:
-                remaining_days_needed = (total_days - completed_days) / avg_rate
-                estimated_completion = now + timedelta(days=remaining_days_needed)
-                progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
+        # Date estimée selon le rythme actuel
+        if avg_rate > 0:
+            remaining_days_needed = (total_days - completed_days) / avg_rate
+            estimated_completion = now + timedelta(days=remaining_days_needed)
+            progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
     
-    # Statut de progression
+    # ✅ Statut intelligent basé sur la progression réelle
     if progression_stats["completion_percentage"] == 100:
         progression_stats["status_label"] = "Terminé"
         progression_stats["status_color"] = "#4CAF50"
     elif progression_stats["is_behind"]:
-        progression_stats["status_label"] = f"En retard de {progression_stats['days_behind']} jour(s)"
+        days_behind = progression_stats["days_behind"]
+        progression_stats["status_label"] = f"En retard de {days_behind} jour(s)"
         progression_stats["status_color"] = "#FF9800"
-    elif completed_days >= current_day - 1:
+    elif progression_stats["days_ahead"] > 0:
+        days_ahead = progression_stats["days_ahead"]
+        progression_stats["status_label"] = f"En avance de {days_ahead} jour(s)"
+        progression_stats["status_color"] = "#4CAF50"
+    else:
         progression_stats["status_label"] = "À jour"
         progression_stats["status_color"] = "#2196F3"
-    else:
-        progression_stats["status_label"] = "En avance"
-        progression_stats["status_color"] = "#4CAF50"
     
     user_plan["progression"] = progression_stats
     return user_plan
+
+def calculate_active_days(started_at, current_date, days_of_week):
+    """Calculer le nombre de jours actifs selon la configuration"""
+    if len(days_of_week) == 7:  # Tous les jours
+        return (current_date - started_at).days + 1
+    
+    # Compter seulement les jours configurés
+    active_days = 0
+    current = started_at.date()
+    end_date = current_date.date()
+    
+    while current <= end_date:
+        if current.weekday() in [(d-1) % 7 for d in days_of_week]:  # Conversion dim=0 vers lun=0
+            active_days += 1
+        current += timedelta(days=1)
+    
+    return active_days
 
 def mark_day_completed_service(user_plan_id, day):
     """Marquer un jour comme complété"""
