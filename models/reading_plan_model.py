@@ -16,11 +16,23 @@ class SimpleReadingPlanModel:
     @staticmethod
     def create_plan(data, created_by=None):
         """Créer un plan de lecture simple"""
+
+        # Calculer la date de fin basée sur start_date + duration_months
+        start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+        
+        # Ajouter les mois à la date de début
+        end_date = start_date.replace(
+            year=start_date.year + (start_date.month + data["duration_months"] - 1) // 12,
+            month=(start_date.month + data["duration_months"] - 1) % 12 + 1
+        )
+        
         plan = {
         "title": data["title"],
-        "subtitle": data["subtitle"],
+        # "subtitle": data["subtitle"],
         "description": data["description"],
         "settings": {
+            "start_date": start_date,
+            "end_date": end_date,
             "duration_months": data["duration_months"],
             "daily_chapters": data["daily_chapters"],
             "has_notifications": data.get("has_notifications", True),
@@ -47,10 +59,10 @@ class SimpleReadingPlanModel:
                 "custom_message": data.get("notification_settings", {}).get("custom_message", None)
             }
         },
-        "content": {
-            "book_focus": data["book_focus"],
-            "reading_schedule": data["reading_schedule"]
-        },
+        # "content": {
+        #     "book_focus": data["book_focus"],
+        #     "reading_schedule": data["reading_schedule"]
+        # },
         "meta": {
             "emoji": data.get("emoji", "📖"),
             "color": data.get("color", "#2196F3"),
@@ -70,7 +82,9 @@ class SimpleReadingPlanModel:
         
         return {
             "message": "Plan de lecture créé avec succès",
-            "plan_id": str(result.inserted_id)
+            "plan_id": str(result.inserted_id),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat()
         }
     
     @staticmethod

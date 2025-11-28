@@ -329,9 +329,7 @@ def create_simple_plan():
             - subtitle
             - description
             - duration_months
-            - daily_chapters
-            - book_focus
-            - reading_schedule
+            - start_date
           properties:
             title:
               type: string
@@ -345,29 +343,6 @@ def create_simple_plan():
             duration_months:
               type: integer
               example: 2
-            daily_chapters:
-              type: integer
-              example: 2
-            book_focus:
-              type: array
-              items:
-                type: string
-              example: ["Psaumes", "Proverbes"]
-            reading_schedule:
-              type: array
-              items:
-                type: object
-                properties:
-                  day:
-                    type: integer
-                  label:
-                    type: string
-                  passages:
-                    type: array
-                    items:
-                      type: string
-                  estimated_time:
-                    type: integer
             emoji:
               type: string
               example: "💛"
@@ -383,22 +358,24 @@ def create_simple_plan():
             is_template:
               type: boolean
               example: false
+            start_date:
+              type: string
+              format: date
+              example: "2024-01-15"
+              description: "Date de début du plan (YYYY-MM-DD)"
             notification_settings:
               type: object
               properties:
                 enabled:
                   type: boolean
                   example: true
-                  description: "Activer les notifications"
                 default_time:
                   type: string
                   example: "07:00"
-                  description: "Heure par défaut"
                 frequency:
                   type: string
                   enum: [daily, weekly, monthly]
                   example: "daily"
-                  description: "Fréquence des notifications"
                 recurrence_pattern:
                   type: object
                   properties:
@@ -409,7 +386,6 @@ def create_simple_plan():
                     interval:
                       type: integer
                       example: 1
-                      description: "Intervalle (tous les X jours/semaines/mois)"
                     days_of_week:
                       type: array
                       items:
@@ -417,13 +393,11 @@ def create_simple_plan():
                         minimum: 0
                         maximum: 6
                       example: [1, 2, 3, 4, 5]
-                      description: "Jours de la semaine (0=dim, 1=lun, ...)"
                     day_of_month:
                       type: integer
                       minimum: 1
                       maximum: 31
                       example: 18
-                      description: "Jour du mois (pour récurrence mensuelle)"
                     end_condition:
                       type: object
                       properties:
@@ -459,7 +433,6 @@ def create_simple_plan():
                 custom_message:
                   type: string
                   example: "Temps de lecture biblique !"
-                  description: "Message personnalisé"
     responses:
       201:
         description: Plan créé avec succès
@@ -472,12 +445,6 @@ def create_simple_plan():
             plan_id:
               type: string
               example: "507f1f77bcf86cd799439060"
-            auto_subscribed:
-              type: boolean
-              example: true
-            user_plan_id:
-              type: string
-              example: "507f1f77bcf86cd799439061"
       400:
         description: Données invalides
       401:
@@ -496,19 +463,6 @@ def create_simple_plan():
         
         # Créer le plan en spécifiant le créateur
         result, status = create_simple_plan_service(data, current_user_id)
-        
-        if status == 201:
-            # Automatiquement inscrire le créateur au plan
-            plan_id = result["plan_id"]
-            subscription_result, _ = subscribe_to_simple_plan_service(
-                plan_id, 
-                current_user_id, 
-                {"reminder_time": "07:00", "reminder_enabled": True}
-            )
-            
-            # Ajouter l'info d'inscription dans la réponse
-            result["auto_subscribed"] = True
-            result["user_plan_id"] = subscription_result.get("user_plan_id")
         
         return jsonify(result), status
         

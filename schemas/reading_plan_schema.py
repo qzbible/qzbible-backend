@@ -50,13 +50,14 @@ class UserNotificationPreferencesSchema(Schema):
 class CreateSimplePlanSchema(Schema):
     """Schema pour créer un plan simple avec notifications"""
     title = fields.String(required=True, validate=validate.Length(min=3, max=100))
-    subtitle = fields.String(required=True, validate=validate.Length(min=3, max=200))
+    # subtitle = fields.String(required=True, validate=validate.Length(min=3, max=200))
     description = fields.String(required=True, validate=validate.Length(max=500))
     duration_months = fields.Integer(required=True, validate=validate.Range(min=1, max=12))
     daily_chapters = fields.Integer(required=True, validate=validate.Range(min=1, max=10))
-    book_focus = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
-    reading_schedule = fields.List(fields.Nested(ReadingScheduleItemSchema), required=True)
+    # book_focus = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
+    # reading_schedule = fields.List(fields.Nested(ReadingScheduleItemSchema), required=True)
     emoji = fields.String(required=False, missing="📖")
+    start_date = fields.Date(required=True)  # ✅ Nouveau champ obligatoire
     color = fields.String(required=False, missing="#2196F3")
     has_notifications = fields.Boolean(required=False, missing=True)
     auto_save_progress = fields.Boolean(required=False, missing=True)

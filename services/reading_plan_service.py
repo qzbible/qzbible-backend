@@ -8,8 +8,11 @@ from models.reading_plan_model import SimpleReadingPlanModel, UserSimplePlanMode
 
 def create_simple_plan_service(plan_data, created_by=None):
     """Créer un plan de lecture simple"""
-    result = SimpleReadingPlanModel.create_plan(plan_data, created_by)
-    return result, 201
+    try:
+        result = SimpleReadingPlanModel.create_plan(plan_data, created_by)
+        return result, 201
+    except Exception as e:
+        return {"message": f"Erreur lors de la création : {str(e)}"}, 500
 
 def get_simple_plans_service(filters=None, page=1, per_page=20):
     """Récupérer les plans simples avec pagination"""
@@ -144,62 +147,6 @@ def get_user_simple_plans_service(user_id, status=None):
             user_plan["progression"] = progression_stats
     
     return user_plans
-
-# def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
-#     """
-#     Récupérer les plans simples d'un utilisateur
-#     filter_type: 'created', 'subscribed', 'all'
-#     """
-#     result = []
-    
-#     if filter_type in ["created", "all"]:
-#         # 1. Plans créés par l'utilisateur
-#         from models.reading_plan_model import SimpleReadingPlanModel
-        
-#         plan_filters = {"meta.created_by": ObjectId(user_id)}
-#         created_plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
-        
-#         for plan in created_plans:
-#             # Récupérer l'inscription
-#             user_subscription = UserSimplePlanModel.get_collection().find_one({
-#                 "user_id": ObjectId(user_id),
-#                 "plan_id": ObjectId(plan["_id"])
-#             })
-            
-#             if user_subscription and (not status or user_subscription.get("status") == status):
-#                 plan_item = {
-#                     "_id": str(user_subscription["_id"]),
-#                     "user_id": str(user_subscription["user_id"]),
-#                     "plan_id": str(user_subscription["plan_id"]),
-#                     "progress": user_subscription["progress"],
-#                     "notification_preferences": user_subscription.get('notification_preferences', None),
-#                     "status": user_subscription["status"],
-#                     "created_at": user_subscription["created_at"],
-#                     "plan_details": {
-#                         "title": plan["title"],
-#                         "subtitle": plan["subtitle"],
-#                         "emoji": plan["meta"]["emoji"],
-#                         "color": plan["meta"]["color"],
-#                         "is_owner": True
-#                     }
-#                 }
-#                 result.append(plan_item)
-    
-#     if filter_type in ["subscribed", "all"]:
-#         # 2. Plans auxquels l'utilisateur est inscrit (mais qu'il n'a pas créés)
-#         subscriptions = UserSimplePlanModel.get_user_plans(user_id, status)
-        
-#         for subscription in subscriptions:
-#             # Vérifier si ce n'est pas un plan qu'il a créé (pour éviter les doublons)
-#             plan_id = subscription["plan_id"]
-#             from models.reading_plan_model import SimpleReadingPlanModel
-#             plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
-            
-#             if plan and str(plan.get("meta", {}).get("created_by", "")) != user_id:
-#                 subscription["plan_details"]["is_owner"] = False
-#                 result.append(subscription)
-    
-#     return result
 
 
 def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
