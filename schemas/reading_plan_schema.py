@@ -53,7 +53,7 @@ class CreateSimplePlanSchema(Schema):
     # subtitle = fields.String(required=True, validate=validate.Length(min=3, max=200))
     description = fields.String(required=True, validate=validate.Length(max=500))
     duration_months = fields.Integer(required=True, validate=validate.Range(min=1, max=12))
-    daily_chapters = fields.Integer(required=True, validate=validate.Range(min=1, max=10))
+    # daily_chapters = fields.Integer(required=True, validate=validate.Range(min=1, max=10))
     # book_focus = fields.List(fields.String(), required=True, validate=validate.Length(min=1))
     # reading_schedule = fields.List(fields.Nested(ReadingScheduleItemSchema), required=True)
     emoji = fields.String(required=False, missing="📖")

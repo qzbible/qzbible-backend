@@ -326,7 +326,7 @@ def create_simple_plan():
           type: object
           required:
             - title
-            - subtitle
+      
             - description
             - duration_months
             - start_date
@@ -334,9 +334,7 @@ def create_simple_plan():
             title:
               type: string
               example: "Psaumes et Proverbes"
-            subtitle:
-              type: string
-              example: "Méditation quotidienne"
+             
             description:
               type: string
               example: "Car l'Éternel donne la sagesse..."

@@ -34,7 +34,7 @@ class SimpleReadingPlanModel:
             "start_date": start_date,
             "end_date": end_date,
             "duration_months": data["duration_months"],
-            "daily_chapters": data["daily_chapters"],
+            # "daily_chapters": data["daily_chapters"],
             "has_notifications": data.get("has_notifications", True),
             "auto_save_progress": data.get("auto_save_progress", True),
             
