@@ -13,28 +13,26 @@ class SimpleReadingPlanModel:
         from extensions import mongo
         return mongo.db.simple_reading_plans
     
-    @staticmethod
-    def create_plan(data, created_by=None):
-        """Créer un plan de lecture simple"""
+@staticmethod
+def create_plan(data, created_by=None):
+    """Créer un plan de lecture simple"""
 
-        # Calculer la date de fin basée sur start_date + duration_months
-        start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
-        
-        # Ajouter les mois à la date de début
-        end_date = start_date.replace(
-            year=start_date.year + (start_date.month + data["duration_months"] - 1) // 12,
-            month=(start_date.month + data["duration_months"] - 1) % 12 + 1
-        )
-        
-        plan = {
+    # Calculer la date de fin basée sur start_date + duration_months
+    start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+    
+    # Ajouter les mois à la date de début
+    end_date = start_date.replace(
+        year=start_date.year + (start_date.month + data["duration_months"] - 1) // 12,
+        month=(start_date.month + data["duration_months"] - 1) % 12 + 1
+    )
+    
+    plan = {
         "title": data["title"],
-        # "subtitle": data["subtitle"],
         "description": data["description"],
         "settings": {
-            "start_date": start_date,
-            "end_date": end_date,
+            "start_date": start_date.isoformat(),  # ✅ Convertir en string ISO
+            "end_date": end_date.isoformat(),      # ✅ Convertir en string ISO
             "duration_months": data["duration_months"],
-            # "daily_chapters": data["daily_chapters"],
             "has_notifications": data.get("has_notifications", True),
             "auto_save_progress": data.get("auto_save_progress", True),
             
@@ -42,31 +40,27 @@ class SimpleReadingPlanModel:
             "notification_settings": {
                 "enabled": data.get("notification_settings", {}).get("enabled", True),
                 "default_time": data.get("notification_settings", {}).get("default_time", "07:00"),
-                "frequency": data.get("notification_settings", {}).get("frequency", "daily"),  # daily, weekly, monthly
+                "frequency": data.get("notification_settings", {}).get("frequency", "daily"),
                 "recurrence_pattern": {
-                    "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("type", "daily"),  # daily, weekly, monthly, yearly
-                    "interval": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("interval", 1),  # every X days/weeks/months
-                    "days_of_week": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("days_of_week", []),  # [0,1,2,3,4,5,6] pour dim-sam
-                    "day_of_month": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("day_of_month", None),  # pour mensuel
+                    "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("type", "daily"),
+                    "interval": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("interval", 1),
+                    "days_of_week": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("days_of_week", []),
+                    "day_of_month": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("day_of_month"),
                     "end_condition": {
-                        "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("type", "never"),  # never, date, count
-                        "end_date": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("end_date", None),
-                        "occurrences": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("occurrences", None)
+                        "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("type", "never"),
+                        "end_date": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("end_date"),
+                        "occurrences": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("occurrences")
                     }
                 },
-                "reminder_types": data.get("notification_settings", {}).get("reminder_types", ["notification"]),  # notification, email, sms
-                "advance_reminders": data.get("notification_settings", {}).get("advance_reminders", []),  # ex: [{"minutes": 15}, {"hours": 1}]
-                "custom_message": data.get("notification_settings", {}).get("custom_message", None)
+                "reminder_types": data.get("notification_settings", {}).get("reminder_types", ["notification"]),
+                "advance_reminders": data.get("notification_settings", {}).get("advance_reminders", []),
+                "custom_message": data.get("notification_settings", {}).get("custom_message")
             }
         },
-        # "content": {
-        #     "book_focus": data["book_focus"],
-        #     "reading_schedule": data["reading_schedule"]
-        # },
         "meta": {
             "emoji": data.get("emoji", "📖"),
             "color": data.get("color", "#2196F3"),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.utcnow(),  # ✅ datetime.utcnow() est OK pour MongoDB
             "created_by": ObjectId(created_by) if created_by else None,
             "is_template": data.get("is_template", False),
             "creator_type": "user" if created_by else "system"
@@ -77,15 +71,15 @@ class SimpleReadingPlanModel:
             "avg_rating": 0.0
         }
     }
-        
-        result = SimpleReadingPlanModel.get_collection().insert_one(plan)
-        
-        return {
-            "message": "Plan de lecture créé avec succès",
-            "plan_id": str(result.inserted_id),
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat()
-        }
+    
+    result = SimpleReadingPlanModel.get_collection().insert_one(plan)
+    
+    return {
+        "message": "Plan de lecture créé avec succès",
+        "plan_id": str(result.inserted_id),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
+    }
     
     @staticmethod
     def get_plan_by_id(plan_id):
@@ -108,7 +102,7 @@ class SimpleReadingPlanModel:
             if filters.get("search"):
                 query["$or"] = [
                     {"title": {"$regex": filters["search"], "$options": "i"}},
-                    {"subtitle": {"$regex": filters["search"], "$options": "i"}},
+                    # {"subtitle": {"$regex": filters["search"], "$options": "i"}},
                     {"description": {"$regex": filters["search"], "$options": "i"}}
                 ]
         
@@ -128,7 +122,7 @@ class SimpleReadingPlanModel:
             if filters.get("search"):
                 query["$or"] = [
                     {"title": {"$regex": filters["search"], "$options": "i"}},
-                    {"subtitle": {"$regex": filters["search"], "$options": "i"}},
+                    # {"subtitle": {"$regex": filters["search"], "$options": "i"}},
                     {"description": {"$regex": filters["search"], "$options": "i"}}
                 ]
         
