@@ -617,7 +617,7 @@ def start_simple_plan(plan_id):
 @jwt_required()
 def get_my_simple_plans():
     """
-    Récupérer mes plans avec calculs de progression
+    Récupérer mes plans créés avec calcul de progression automatique
     ---
     tags:
       - Simple Reading Plans
@@ -632,6 +632,7 @@ def get_my_simple_plans():
         schema:
           type: string
           enum: [active, completed, paused]
+        description: Filtrer par statut (optionnel)
     responses:
       200:
         description: Plans avec progression récupérés
@@ -647,62 +648,55 @@ def get_my_simple_plans():
                 properties:
                   _id:
                     type: string
-                  plan_details:
-                    type: object
-                    properties:
-                      title:
-                        type: string
-                      subtitle:
-                        type: string
-                      emoji:
-                        type: string
-                      color:
-                        type: string
+                  title:
+                    type: string
+                  description:
+                    type: string
+                  emoji:
+                    type: string
+                  color:
+                    type: string
+                  start_date:
+                    type: string
+                  end_date:
+                    type: string
+                  duration_months:
+                    type: integer
                   progression:
                     type: object
                     properties:
                       total_days:
                         type: integer
-                        example: 40
-                      completed_days:
+                        description: "Durée totale en jours"
+                      elapsed_days:
                         type: integer
-                        example: 2
+                        description: "Jours écoulés depuis le début"
                       remaining_days:
                         type: integer
-                        example: 38
+                        description: "Jours restants"
                       completion_percentage:
                         type: number
-                        example: 5.0
-                      current_day:
-                        type: integer
-                        example: 3
-                      is_behind:
-                        type: boolean
-                        example: false
-                      days_behind:
-                        type: integer
-                        example: 0
+                        description: "Pourcentage d'avancement temporel"
+                      current_date:
+                        type: string
+                        description: "Date du jour"
                       status_label:
                         type: string
-                        example: "À jour"
+                        example: "En cours - Jour 15/60"
                       status_color:
                         type: string
-                        example: "#2196F3"
-                      estimated_completion_date:
-                        type: string
-                        example: "2025-01-15"
-                      average_completion_rate:
-                        type: number
-                        example: 0.67
+                      is_completed:
+                        type: boolean
+                      is_started:
+                        type: boolean
             total:
               type: integer
     """
     try:
         current_user_id = get_jwt_identity()
-        status = request.args.get("status")
-        filter_type = request.args.get("type", "all")  # created, subscribed, all
+        status_filter = request.args.get("status")
         
-        plans = get_user_simple_plans_service(current_user_id, status, filter_type)
+        plans = get_user_simple_plans_service(current_user_id, status_filter)
         
         return jsonify({
             "message": "Vos plans récupérés avec succès",
@@ -712,6 +706,7 @@ def get_my_simple_plans():
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+    
 
 @reading_plan_bp.route("/user-plan/<user_plan_id>/complete-day", methods=["POST"])
 @jwt_required()

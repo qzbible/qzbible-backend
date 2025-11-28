@@ -148,170 +148,182 @@ def get_user_simple_plans_service(user_id, status=None):
     
     return user_plans
 
+def generate_plan_days(start_date, end_date):
+    """Générer tous les jours du plan de lecture"""
+    from datetime import datetime, date, timedelta
+    
+    # Convertir en objets date si nécessaire
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    
+    days = []
+    current_date = start_date
+    day_number = 1
+    
+    while current_date <= end_date:
+        days.append({
+            "day": day_number,
+            "date": current_date.isoformat(),
+            "date_formatted": current_date.strftime("%d/%m/%Y"),
+            "weekday": current_date.strftime("%A"),
+            "weekday_fr": get_french_weekday(current_date.weekday()),
+            "is_today": current_date == date.today(),
+            "is_past": current_date < date.today(),
+            "is_future": current_date > date.today()
+        })
+        
+        current_date += timedelta(days=1)
+        day_number += 1
+    
+    return days
 
-def get_user_simple_plans_service(user_id, status=None, filter_type="all"):
+def get_french_weekday(weekday_num):
+    """Convertir le numéro de jour en nom français"""
+    days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+    return days[weekday_num]
+
+def get_plan_status(progression):
+    """Déterminer le statut du plan pour le filtrage"""
+    if not progression["is_started"]:
+        return "pending"
+    elif progression["is_completed"]:
+        return "completed"
+    else:
+        return "active"
+
+def get_user_simple_plans_service(user_id, status_filter=None):
     """
-    Récupérer les plans simples d'un utilisateur avec calculs de progression
-    filter_type: 'created', 'subscribed', 'all'
+    Récupérer les plans créés par l'utilisateur avec calcul de progression automatique
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, date
+    from models.reading_plan_model import SimpleReadingPlanModel
+    
+    # Récupérer tous les plans créés par l'utilisateur
+    plan_filters = {"meta.created_by": ObjectId(user_id)}
+    plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
+    
     result = []
+    current_date = date.today()
     
-    if filter_type in ["created", "all"]:
-        # 1. Plans créés par l'utilisateur
-        from models.reading_plan_model import SimpleReadingPlanModel  # ✅ Correction : bon import
+    for plan in plans:
+        # Générer tous les jours du plan
+        plan_days = generate_plan_days(
+            plan["settings"]["start_date"], 
+            plan["settings"]["end_date"]
+        )
         
-        plan_filters = {"meta.created_by": ObjectId(user_id)}
-        created_plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
+        # Calcul de la progression automatique
+        progression = calculate_plan_progression(plan, current_date, plan_days)
         
-        for plan in created_plans:
-            # Récupérer l'inscription
-            user_subscription = UserSimplePlanModel.get_collection().find_one({
-                "user_id": ObjectId(user_id),
-                "plan_id": ObjectId(plan["_id"])
-            })
-            
-            if user_subscription and (not status or user_subscription.get("status") == status):
-                plan_item = {
-                    "_id": str(user_subscription["_id"]),
-                    "user_id": str(user_subscription["user_id"]),
-                    "plan_id": str(user_subscription["plan_id"]),
-                    "progress": user_subscription["progress"],
-                    "notification_preferences": user_subscription.get('notification_preferences', {}),  # ✅ Correction : dict par défaut
-                    "status": user_subscription["status"],
-                    "created_at": user_subscription["created_at"],
-                    "plan_details": {
-                        "title": plan["title"],
-                        "subtitle": plan["subtitle"],
-                        "emoji": plan["meta"]["emoji"],
-                        "color": plan["meta"]["color"],
-                        "is_owner": True
-                    }
-                }
-                
-                # ✅ Ajouter les calculs de progression
-                plan_item = add_progression_calculations(plan_item, plan)
-                result.append(plan_item)
+        # Filtrer par statut si demandé
+        if status_filter:
+            plan_status = get_plan_status(progression)
+            if plan_status != status_filter:
+                continue
+        
+        plan_item = {
+            "_id": str(plan["_id"]),
+            "title": plan["title"],
+            "description": plan["description"],
+            "emoji": plan["meta"]["emoji"],
+            "color": plan["meta"]["color"],
+            "start_date": plan["settings"]["start_date"],
+            "end_date": plan["settings"]["end_date"],
+            "duration_months": plan["settings"]["duration_months"],
+            "has_notifications": plan["settings"]["has_notifications"],
+            "created_at": plan["meta"]["created_at"],
+            "days": plan_days,  # ✅ Tous les jours du plan
+            "progression": progression
+        }
+        
+        result.append(plan_item)
     
-    if filter_type in ["subscribed", "all"]:
-        # 2. Plans auxquels l'utilisateur est inscrit (mais qu'il n'a pas créés)
-        subscriptions = UserSimplePlanModel.get_user_plans(user_id, status)
-        
-        for subscription in subscriptions:
-            # Vérifier si ce n'est pas un plan qu'il a créé (pour éviter les doublons)
-            plan_id = subscription["plan_id"]
-            from models.reading_plan_model import SimpleReadingPlanModel  # ✅ Correction : bon import
-            plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
-            
-            if plan and str(plan.get("meta", {}).get("created_by", "")) != user_id:
-                subscription["plan_details"]["is_owner"] = False
-                
-                # ✅ Ajouter les calculs de progression
-                subscription = add_progression_calculations(subscription, plan)
-                result.append(subscription)
+    # Trier par date de création (plus récent en premier)
+    result.sort(key=lambda x: x["created_at"], reverse=True)
     
     return result
-
-def add_progression_calculations(user_plan, plan):
-    """Calcul automatique de progression basé sur la date système et la configuration"""
-    from datetime import datetime, timezone, timedelta
+def calculate_plan_progression(plan, current_date, plan_days):
+    """
+    Calcul automatique de progression basé uniquement sur les dates
+    """
+    from datetime import datetime, date
     
-    if not plan or not plan.get("content", {}).get("reading_schedule"):
-        return user_plan
+    # Récupérer les dates du plan
+    start_date_str = plan["settings"]["start_date"]
+    end_date_str = plan["settings"]["end_date"]
     
-    total_days = len(plan["content"]["reading_schedule"])
-    completed_days = len(user_plan["progress"].get("completed_days", []))
-    
-    # ✅ Calcul automatique du jour attendu selon la date système
-    if user_plan["progress"].get("started_at"):
-        started_at = user_plan["progress"]["started_at"]
-        if started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=timezone.utc)
-        
-        now = datetime.now(timezone.utc)
-        days_since_start = (now - started_at).days + 1
-        
-        # Le jour où l'utilisateur DEVRAIT être selon la configuration
-        expected_current_day = min(days_since_start, total_days)
-        
-        # Gestion de la fréquence (si c'est pas quotidien)
-        frequency = user_plan.get("notification_preferences", {}).get("frequency", "daily")
-        days_of_week = user_plan.get("notification_preferences", {}).get("days_of_week", [0,1,2,3,4,5,6])
-        
-        if frequency == "weekly" or len(days_of_week) < 7:
-            # Calculer combien de jours "actifs" se sont écoulés
-            expected_current_day = calculate_active_days(started_at, now, days_of_week)
+    # Convertir en objets date
+    if isinstance(start_date_str, str):
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     else:
-        expected_current_day = 1
-        days_since_start = 1
+        start_date = start_date_str
+        
+    if isinstance(end_date_str, str):
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    else:
+        end_date = end_date_str
     
-    # Calculs de progression basés sur la réalité
-    progression_stats = {
+    # Calculs temporels
+    total_days = len(plan_days)
+    
+    # Déterminer le jour actuel dans le plan
+    current_day = None
+    for day in plan_days:
+        if day["is_today"]:
+            current_day = day["day"]
+            break
+    
+    # Déterminer le statut selon la date actuelle
+    if current_date < start_date:
+        # Plan pas encore commencé
+        elapsed_days = 0
+        remaining_days = total_days
+        completion_percentage = 0.0
+        is_started = False
+        is_completed = False
+        status_label = f"Commence le {start_date.strftime('%d/%m/%Y')}"
+        status_color = "#9E9E9E"
+        
+    elif current_date > end_date:
+        # Plan terminé
+        elapsed_days = total_days
+        remaining_days = 0
+        completion_percentage = 100.0
+        is_started = True
+        is_completed = True
+        status_label = f"Terminé le {end_date.strftime('%d/%m/%Y')}"
+        status_color = "#4CAF50"
+        
+    else:
+        # Plan en cours
+        elapsed_days = (current_date - start_date).days + 1
+        remaining_days = max(0, total_days - elapsed_days)
+        completion_percentage = round((elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
+        is_started = True
+        is_completed = False
+        status_label = f"Jour {elapsed_days}/{total_days}"
+        status_color = "#2196F3"
+    
+    return {
         "total_days": total_days,
-        "completed_days": completed_days,
-        "remaining_days": max(0, total_days - completed_days),
-        "completion_percentage": round((completed_days / total_days) * 100, 1) if total_days > 0 else 0,
+        "elapsed_days": elapsed_days,
+        "remaining_days": remaining_days,
+        "completion_percentage": completion_percentage,
+        "current_date": current_date.isoformat(),
+        "current_day": current_day,  # ✅ Jour actuel dans le plan
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "is_started": is_started,
+        "is_completed": is_completed,
+        "status_label": status_label,
+        "status_color": status_color,
         
-        # ✅ Jour attendu calculé automatiquement
-        "expected_current_day": expected_current_day,
-        "days_since_start": days_since_start,
-        
-        # ✅ Nouveau calcul du retard basé sur l'attendu vs réalisé
-        "is_behind": completed_days < expected_current_day,
-        "days_behind": max(0, expected_current_day - completed_days),
-        "days_ahead": max(0, completed_days - expected_current_day),
-        
-        # Prédictions
-        "average_completion_rate": None,
-        "estimated_completion_date": None
+        # Informations supplémentaires
+        "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
+        "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0
     }
-    
-    # Taux de completion réel
-    if days_since_start > 0:
-        avg_rate = completed_days / days_since_start
-        progression_stats["average_completion_rate"] = round(avg_rate, 2)
-        
-        # Date estimée selon le rythme actuel
-        if avg_rate > 0:
-            remaining_days_needed = (total_days - completed_days) / avg_rate
-            estimated_completion = now + timedelta(days=remaining_days_needed)
-            progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
-    
-    # ✅ Statut intelligent basé sur la progression réelle
-    if progression_stats["completion_percentage"] == 100:
-        progression_stats["status_label"] = "Terminé"
-        progression_stats["status_color"] = "#4CAF50"
-    elif progression_stats["is_behind"]:
-        days_behind = progression_stats["days_behind"]
-        progression_stats["status_label"] = f"En retard de {days_behind} jour(s)"
-        progression_stats["status_color"] = "#FF9800"
-    elif progression_stats["days_ahead"] > 0:
-        days_ahead = progression_stats["days_ahead"]
-        progression_stats["status_label"] = f"En avance de {days_ahead} jour(s)"
-        progression_stats["status_color"] = "#4CAF50"
-    else:
-        progression_stats["status_label"] = "À jour"
-        progression_stats["status_color"] = "#2196F3"
-    
-    user_plan["progression"] = progression_stats
-    return user_plan
-
-def calculate_active_days(started_at, current_date, days_of_week):
-    """Calculer le nombre de jours actifs selon la configuration"""
-    if len(days_of_week) == 7:  # Tous les jours
-        return (current_date - started_at).days + 1
-    
-    # Compter seulement les jours configurés
-    active_days = 0
-    current = started_at.date()
-    end_date = current_date.date()
-    
-    while current <= end_date:
-        if current.weekday() in [(d-1) % 7 for d in days_of_week]:  # Conversion dim=0 vers lun=0
-            active_days += 1
-        current += timedelta(days=1)
-    
-    return active_days
 
 def mark_day_completed_service(user_plan_id, day):
     """Marquer un jour comme complété"""
