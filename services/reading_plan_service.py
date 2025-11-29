@@ -14,139 +14,7 @@ def create_simple_plan_service(plan_data, created_by=None):
     except Exception as e:
         return {"message": f"Erreur lors de la création : {str(e)}"}, 500
 
-def get_simple_plans_service(filters=None, page=1, per_page=20):
-    """Récupérer les plans simples avec pagination"""
-    skip = (page - 1) * per_page
-    
-    plans = SimpleReadingPlanModel.get_all_plans(filters, skip, per_page)
-    total = SimpleReadingPlanModel.count_plans(filters)
-    
-    # Convertir les ObjectId
-    for plan in plans:
-        plan["_id"] = str(plan["_id"])
-    
-    return {
-        "data": plans,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": (total + per_page - 1) // per_page
-    }
-
-def get_simple_plan_detail_service(plan_id):
-    """Récupérer les détails d'un plan simple"""
-    plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
-    
-    if not plan:
-        return {"message": "Plan non trouvé"}, 404
-    
-    # Formater pour l'interface
-    response = {
-        "title": plan["title"],
-        "subtitle": plan["subtitle"],
-        "description": plan["description"],
-        "duration": {
-            "months": plan["settings"]["duration_months"],
-            "label": f"{plan['settings']['duration_months']} mois"
-        },
-        "daily_reading": {
-            "chapters": plan["settings"]["daily_chapters"],
-            "label": f"{plan['settings']['daily_chapters']} chapitres par jour"
-        },
-        "notifications": {
-            "available": plan["settings"]["has_notifications"],
-            "label": "Notifications quotidiennes disponibles"
-        },
-        "auto_save": {
-            "enabled": plan["settings"]["auto_save_progress"],
-            "label": "Progression automatiquement sauvegardée"
-        },
-        "schedule_preview": plan["content"]["reading_schedule"][:3],  # 3 premiers jours
-        "meta": {
-            "emoji": plan["meta"]["emoji"],
-            "color": plan["meta"]["color"]
-        },
-        "stats": plan["stats"]
-    }
-    
-    return response
-
-def subscribe_to_simple_plan_service(plan_id, user_id, subscription_data):
-    """S'inscrire à un plan simple"""
-    data = {
-        "plan_id": plan_id,
-        "user_id": user_id,
-        "reminder_time": subscription_data.get("reminder_time", "07:00"),
-        "reminder_enabled": subscription_data.get("reminder_enabled", True)
-    }
-    
-    result, status = UserSimplePlanModel.create_subscription(data)
-    return result, status
-
-
-def get_user_simple_plans_service(user_id, status=None):
-    """Récupérer les plans avec calculs de progression"""
-    user_plans = UserSimplePlanModel.get_user_plans(user_id, status)
-    
-    for user_plan in user_plans:
-        # Récupérer le plan principal pour les calculs
-        plan = SimpleReadingPlanModel.get_plan_by_id(user_plan["plan_id"])
-        
-        if plan:
-            total_days = len(plan["content"]["reading_schedule"])
-            completed_days = len(user_plan["progress"]["completed_days"])
-            current_day = user_plan["progress"]["current_day"]
-            
-            # ✅ Calculs de progression
-            progression_stats = {
-                "total_days": total_days,
-                "completed_days": completed_days,
-                "remaining_days": max(0, total_days - completed_days),
-                "completion_percentage": round((completed_days / total_days) * 100, 1) if total_days > 0 else 0,
-                "current_day": current_day,
-                "is_behind": current_day > completed_days + 1,  # En retard ?
-                "days_behind": max(0, current_day - completed_days - 1),
-                
-                # Temps estimé
-                "estimated_completion_date": None,
-                "days_since_start": None,
-                "average_completion_rate": None
-            }
-            
-            # Calcul des dates
-            if user_plan["progress"].get("started_at"):
-                started_at = user_plan["progress"]["started_at"]
-                days_since_start = (datetime.utcnow() - started_at).days + 1
-                progression_stats["days_since_start"] = days_since_start
-                
-                # Taux de completion moyen
-                if days_since_start > 0:
-                    avg_rate = completed_days / days_since_start
-                    progression_stats["average_completion_rate"] = round(avg_rate, 2)
-                    
-                    # Date estimée de fin (si on continue au même rythme)
-                    if avg_rate > 0:
-                        remaining_days_needed = (total_days - completed_days) / avg_rate
-                        estimated_completion = datetime.utcnow() + timedelta(days=remaining_days_needed)
-                        progression_stats["estimated_completion_date"] = estimated_completion.strftime("%Y-%m-%d")
-            
-            # Statut de progression
-            if progression_stats["completion_percentage"] == 100:
-                progression_stats["status_label"] = "Terminé"
-                progression_stats["status_color"] = "#4CAF50"
-            elif progression_stats["is_behind"]:
-                progression_stats["status_label"] = f"En retard de {progression_stats['days_behind']} jour(s)"
-                progression_stats["status_color"] = "#FF9800"
-            elif completed_days >= current_day - 1:
-                progression_stats["status_label"] = "À jour"
-                progression_stats["status_color"] = "#2196F3"
-            else:
-                progression_stats["status_label"] = "En avance"
-                progression_stats["status_color"] = "#4CAF50"
-            
-            user_plan["progression"] = progression_stats
-    
-    return user_plans
+ 
 
 def generate_relevant_plan_days(start_date, end_date, current_date, plan_status="active"):
     """
@@ -209,6 +77,7 @@ def generate_relevant_plan_days(start_date, end_date, current_date, plan_status=
     
     return days
 
+
 def create_day_object(day_date, day_number, current_date, start_date, end_date):
     """Créer un objet jour standardisé"""
     return {
@@ -253,16 +122,26 @@ def get_user_simple_plans_service(user_id, status_filter=None):
         
         for plan in plans:
             try:
-                # ✅ Calcul de la progression pour TOUS les plans
-                progression = calculate_plan_progression(plan, current_date)
-                
-                # ✅ Générer les jours selon le statut du plan
-                relevant_days = generate_relevant_plan_days(
+                progression = calculate_plan_progression_with_pauses(plan, current_date)
+            
+                # Générer les jours avec statut de pause
+                relevant_days = generate_relevant_plan_days_with_pauses(
                     progression["start_date"], 
                     progression["end_date"],
                     current_date,
+                    plan,  # ✅ Passer le plan complet
                     plan_status=progression["plan_status"]
                 )
+                # ✅ Calcul de la progression pour TOUS les plans
+                # progression = calculate_plan_progression(plan, current_date)
+                
+                # # ✅ Générer les jours selon le statut du plan
+                # relevant_days = generate_relevant_plan_days(
+                #     progression["start_date"], 
+                #     progression["end_date"],
+                #     current_date,
+                #     plan_status=progression["plan_status"]
+                # )
                 
                 # ✅ Filtrer par statut SEULEMENT si demandé
                 if status_filter:
@@ -284,7 +163,10 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     "has_notifications": settings.get("has_notifications", True),
                     "created_at": meta.get("created_at", datetime.utcnow()),
                     "relevant_days": relevant_days,
-                    "progression": progression
+                    "progression": progression,
+                    "current_status": plan.get("current_status", "active"),
+                    "is_paused": plan.get("current_status") == "paused",
+                    "pause_info": get_current_pause_info(plan),
                 }
                 
                 result.append(plan_item)
@@ -299,7 +181,22 @@ def get_user_simple_plans_service(user_id, status_filter=None):
     except Exception as e:
         print(f"Erreur dans get_user_simple_plans_service: {str(e)}")
         return []
+
+def get_current_pause_info(plan):
+    """Récupérer les infos de la pause actuelle"""
+    if plan.get("current_status") != "paused":
+        return None
     
+    pause_history = plan.get("pause_history", [])
+    for pause in reversed(pause_history):
+        if pause.get("resume_date") is None:
+            return {
+                "pause_date": pause["pause_date"],
+                "reason": pause.get("reason", ""),
+                "paused_days": (datetime.now().date() - 
+                              datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()).days
+            }
+    return None   
 
 def calculate_plan_progression(plan, current_date, plan_days=None):
     """
@@ -450,12 +347,516 @@ def get_current_reading_service(user_plan_id):
         print(f"DEBUG: Exception = {str(e)}")
         return {"message": f"Erreur : {str(e)}"}, 500
 
-def search_simple_plans_service(search_term):
-    """Rechercher dans les plans simples"""
-    filters = {"search": search_term}
-    plans = SimpleReadingPlanModel.get_all_plans(filters, 0, 20)
+ 
+def get_simple_plan_details_service(plan_id, user_id, include_all_days=False):
+    """
+    Récupérer les détails complets d'un plan de lecture
+    """
+    from datetime import datetime, date
+    from models.reading_plan_model import SimpleReadingPlanModel
+    from bson import ObjectId
+    from bson.errors import InvalidId
     
-    for plan in plans:
-        plan["_id"] = str(plan["_id"])
+    try:
+        # Valider l'ObjectId
+        if not ObjectId.is_valid(plan_id):
+            raise ValueError("ID de plan invalide")
+        
+        # Récupérer le plan
+        plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
+        
+        if not plan:
+            return None
+        
+        # Vérifier les droits d'accès
+        # Pour l'instant, seul le créateur peut voir le plan
+        # Vous pouvez ajouter d'autres logiques d'accès ici
+        plan_creator = plan.get("meta", {}).get("created_by")
+        is_owner = str(plan_creator) == user_id if plan_creator else False
+        
+        if not is_owner:
+            # Vous pouvez ajouter ici la logique pour les plans publics
+            # ou les souscriptions
+            return None
+        
+        current_date = date.today()
+        
+        # Calcul de la progression
+        progression = calculate_plan_progression_with_pauses(plan, current_date)
+        
+        # Générer les jours selon le paramètre
+        if include_all_days:
+            # Tous les jours du plan
+            plan_days = generate_all_plan_days(
+                progression["start_date"],
+                progression["end_date"]
+            )
+        else:
+            # Seulement les 5 jours pertinents
+            plan_days = generate_relevant_plan_days_with_pauses(
+                    progression["start_date"], 
+                    progression["end_date"],
+                    current_date,
+                    plan,  # ✅ Passer le plan complet
+                    plan_status=progression["plan_status"]
+                )
+            # plan_days = generate_relevant_plan_days(
+            #     progression["start_date"], 
+            #     progression["end_date"],
+            #     current_date,
+            #     plan_status=progression["plan_status"]
+            # )
+        
+        # Construire la réponse détaillée
+        settings = plan.get("settings", {})
+        meta = plan.get("meta", {})
+        
+        plan_details = {
+            "_id": str(plan["_id"]),
+            "title": plan.get("title", "Plan sans titre"),
+            "description": plan.get("description", "Aucune description"),
+            "emoji": meta.get("emoji", "📖"),
+            "color": meta.get("color", "#2196F3"),
+            "start_date": progression["start_date"],
+            "end_date": progression["end_date"],
+            "duration_months": settings.get("duration_months", 1),
+            "has_notifications": settings.get("has_notifications", True),
+            "auto_save_progress": settings.get("auto_save_progress", True),
+            "is_template": meta.get("is_template", False),
+            
+            # Paramètres de notification détaillés
+            "notification_settings": settings.get("notification_settings", {}),
+            
+            # Informations de propriété
+            "is_owner": is_owner,
+            "created_at": meta.get("created_at"),
+            "creator_type": meta.get("creator_type", "user"),
+            
+            # Jours et progression
+            "days": plan_days,
+            "progression": progression,
+            
+            # Métadonnées supplémentaires
+            "total_days_in_plan": len(plan_days) if include_all_days else progression["total_days"]
+        }
+        
+        return plan_details
+        
+    except Exception as e:
+        print(f"Erreur dans get_simple_plan_details_service: {str(e)}")
+        return None
     
-    return plans
+def generate_all_plan_days(start_date, end_date):
+    """
+    Générer TOUS les jours du plan (pour l'option include_all_days=true)
+    """
+    from datetime import datetime, date, timedelta
+    
+    # Convertir en objets date si nécessaire
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    
+    days = []
+    current_date = date.today()
+    current_loop_date = start_date
+    day_number = 1
+    
+    while current_loop_date <= end_date:
+        days.append({
+            "day": day_number,
+            "date": current_loop_date.isoformat(),
+            "date_formatted": current_loop_date.strftime("%d/%m/%Y"),
+            "weekday": current_loop_date.strftime("%A"),
+            "weekday_fr": get_french_weekday(current_loop_date.weekday()),
+            "is_today": current_loop_date == current_date,
+            "is_past": current_loop_date < current_date,
+            "is_future": current_loop_date > current_date,
+            "is_in_plan": True
+        })
+        
+        current_loop_date += timedelta(days=1)
+        day_number += 1
+    
+    return days
+
+
+def generate_relevant_plan_days_with_pauses(start_date, end_date, current_date, plan, plan_status="active"):
+    """
+    Générer les jours avec gestion des pauses
+    """
+    from datetime import datetime, date, timedelta
+    
+    # Convertir les dates
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if isinstance(current_date, str):
+        current_date = datetime.strptime(current_date, "%Y-%m-%d").date()
+    
+    # Récupérer l'historique des pauses
+    pause_history = plan.get("pause_history", [])
+    current_plan_status = plan.get("current_status", "active")
+    
+    days = []
+    
+    # Logique selon le statut (comme avant)
+    if plan_status == "pending":
+        range_start = start_date
+        range_end = min(end_date, start_date + timedelta(days=4))
+    elif plan_status == "completed":
+        total_days = (end_date - start_date).days + 1
+        range_start = max(start_date, end_date - timedelta(days=4))
+        range_end = end_date
+    else:  # active
+        range_start = max(start_date, current_date - timedelta(days=2))
+        range_end = min(end_date, current_date + timedelta(days=2))
+    
+    # Générer les jours avec statut de pause
+    current_loop_date = range_start
+    day_number = (range_start - start_date).days + 1
+    
+    while current_loop_date <= range_end:
+        if start_date <= current_loop_date <= end_date:
+            # Vérifier si ce jour est dans une période de pause
+            is_paused = is_date_in_pause_period(current_loop_date, pause_history)
+            
+            day_obj = {
+                "day": day_number,
+                "date": current_loop_date.isoformat(),
+                "date_formatted": current_loop_date.strftime("%d/%m/%Y"),
+                "weekday": current_loop_date.strftime("%A"),
+                "weekday_fr": get_french_weekday(current_loop_date.weekday()),
+                "is_today": current_loop_date == current_date,
+                "is_past": current_loop_date < current_date,
+                "is_future": current_loop_date > current_date,
+                "is_in_plan": True,
+                "is_paused": is_paused,  # ✅ Nouveau statut
+                "status": "paused" if is_paused else ("completed" if current_loop_date < current_date else "pending")
+            }
+            
+            days.append(day_obj)
+        
+        current_loop_date += timedelta(days=1)
+        day_number += 1
+    
+    return days
+
+def is_date_in_pause_period(check_date, pause_history):
+    """Vérifier si une date est dans une période de pause"""
+    from datetime import datetime
+    
+    for pause in pause_history:
+        pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        pause_end = None
+        
+        if pause["resume_date"]:
+            pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+        else:
+            # Pause active - considérer jusqu'à aujourd'hui
+            pause_end = datetime.now().date()
+        
+        if pause_start <= check_date <= pause_end:
+            return True
+    
+    return False
+
+def pause_plan_service(plan_id, user_id, data):
+    """Mettre un plan en pause"""
+    from datetime import datetime, date
+    from models.reading_plan_model import SimpleReadingPlanModel
+    
+    plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
+    if not plan:
+        raise ValueError("Plan non trouvé")
+    
+    # Vérifier les droits
+    if str(plan.get("meta", {}).get("created_by")) != user_id:
+        raise ValueError("Accès non autorisé")
+    
+    # Vérifier que le plan n'est pas déjà en pause
+    if plan.get("current_status") == "paused":
+        raise ValueError("Le plan est déjà en pause")
+    
+    pause_date_str = data.get("pause_date", date.today().isoformat())
+    pause_date = datetime.strptime(pause_date_str, "%Y-%m-%d").date()
+    
+    # Créer l'entrée de pause
+    pause_entry = {
+        "pause_date": pause_date.isoformat(),
+        "resume_date": None,
+        "reason": data.get("reason", ""),
+        "paused_by": ObjectId(user_id),
+        "created_at": datetime.utcnow()
+    }
+    
+    # Mettre à jour le plan
+    update_data = {
+        "$set": {
+            "current_status": "paused"
+        },
+        "$push": {
+            "pause_history": pause_entry
+        }
+    }
+    
+    SimpleReadingPlanModel.get_collection().update_one(
+        {"_id": ObjectId(plan_id)},
+        update_data
+    )
+    
+    return {
+        "message": "Plan mis en pause avec succès",
+        "pause_date": pause_date.isoformat(),
+        "status": "paused"
+    }
+
+def resume_plan_service(plan_id, user_id, data):
+    """Reprendre un plan en pause"""
+    from datetime import datetime, date
+    from models.reading_plan_model import SimpleReadingPlanModel
+    
+    plan = SimpleReadingPlanModel.get_plan_by_id(plan_id)
+    if not plan:
+        raise ValueError("Plan non trouvé")
+    
+    if str(plan.get("meta", {}).get("created_by")) != user_id:
+        raise ValueError("Accès non autorisé")
+    
+    if plan.get("current_status") != "paused":
+        raise ValueError("Le plan n'est pas en pause")
+    
+    resume_date_str = data.get("resume_date", date.today().isoformat())
+    resume_date = datetime.strptime(resume_date_str, "%Y-%m-%d").date()
+    adjust_schedule = data.get("adjust_schedule", True)
+    
+    # Trouver la dernière pause
+    pause_history = plan.get("pause_history", [])
+    last_pause = None
+    for pause in reversed(pause_history):
+        if pause.get("resume_date") is None:
+            last_pause = pause
+            break
+    
+    if not last_pause:
+        raise ValueError("Aucune pause active trouvée")
+    
+    pause_date = datetime.strptime(last_pause["pause_date"], "%Y-%m-%d").date()
+    paused_days = (resume_date - pause_date).days
+    
+    # Calculer le nouvel end_date si ajustement demandé
+    new_end_date = None
+    if adjust_schedule:
+        original_end_date = datetime.strptime(plan["settings"]["end_date"], "%Y-%m-%d").date()
+        new_end_date = original_end_date + timedelta(days=paused_days)
+    
+    # Mettre à jour l'historique de pause
+    update_data = {
+        "$set": {
+            "current_status": "active",
+            f"pause_history.{len(pause_history) - 1}.resume_date": resume_date.isoformat()
+        }
+    }
+    
+    if new_end_date:
+        update_data["$set"]["settings.end_date"] = new_end_date.isoformat()
+        update_data["$inc"] = {"pause_adjustments.total_paused_days": paused_days}
+    
+    SimpleReadingPlanModel.get_collection().update_one(
+        {"_id": ObjectId(plan_id)},
+        update_data
+    )
+    
+    return {
+        "message": "Plan repris avec succès",
+        "resume_date": resume_date.isoformat(),
+        "paused_days": paused_days,
+        "new_end_date": new_end_date.isoformat() if new_end_date else None,
+        "status": "active"
+    }
+
+
+
+
+def calculate_plan_progression_with_pauses(plan, current_date):
+    """
+    Calcul de progression avec prise en compte des pauses
+    """
+    from datetime import datetime, date, timedelta
+    
+    # Gestion de la compatibilité avec les anciens plans (comme avant)
+    settings = plan.get("settings", {})
+    
+    if "start_date" in settings and "end_date" in settings:
+        start_date_str = settings["start_date"]
+        end_date_str = settings["end_date"]
+        
+        if isinstance(start_date_str, str):
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        else:
+            start_date = start_date_str
+            
+        if isinstance(end_date_str, str):
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        else:
+            end_date = end_date_str
+    else:
+        # Ancien format - calculer à partir de created_at + duration_months
+        duration_months = settings.get("duration_months", 1)
+        created_at = plan.get("meta", {}).get("created_at")
+        
+        if created_at:
+            if hasattr(created_at, 'date'):
+                start_date = created_at.date()
+            else:
+                start_date = datetime.strptime(str(created_at)[:10], "%Y-%m-%d").date()
+            
+            end_date = start_date.replace(
+                year=start_date.year + (start_date.month + duration_months - 1) // 12,
+                month=(start_date.month + duration_months - 1) % 12 + 1
+            )
+        else:
+            start_date = current_date
+            end_date = current_date + timedelta(days=30 * duration_months)
+    
+    # ✅ Récupérer les infos de pause
+    pause_history = plan.get("pause_history", [])
+    current_plan_status = plan.get("current_status", "active")
+    pause_adjustments = plan.get("pause_adjustments", {})
+    
+    # ✅ Calculer le nombre de jours en pause
+    total_paused_days = calculate_total_paused_days(pause_history, current_date)
+    
+    # ✅ Ajuster les calculs selon les pauses
+    total_days = (end_date - start_date).days + 1
+    
+    # Jours effectivement écoulés (sans compter les pauses)
+    if current_date < start_date:
+        effective_elapsed_days = 0
+    else:
+        raw_elapsed_days = min((current_date - start_date).days + 1, total_days)
+        paused_days_in_elapsed = calculate_paused_days_in_period(pause_history, start_date, current_date)
+        effective_elapsed_days = max(0, raw_elapsed_days - paused_days_in_elapsed)
+    
+    current_day = None
+    
+    # ✅ Déterminer le statut du plan avec gestion des pauses
+    if current_plan_status == "paused":
+        # Plan en pause
+        completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
+        remaining_days = max(0, total_days - effective_elapsed_days)
+        is_started = effective_elapsed_days > 0
+        is_completed = False
+        status_label = f"En pause - Jour {effective_elapsed_days}/{total_days}"
+        status_color = "#FF9800"
+        plan_status = "paused"
+        
+        # Trouver le jour actuel dans le plan (sans compter les pauses)
+        current_day = effective_elapsed_days if effective_elapsed_days > 0 else 1
+        
+    elif current_date < start_date:
+        # Plan pas encore commencé
+        effective_elapsed_days = 0
+        remaining_days = total_days
+        completion_percentage = 0.0
+        is_started = False
+        is_completed = False
+        status_label = f"Commence le {start_date.strftime('%d/%m/%Y')}"
+        status_color = "#9E9E9E"
+        plan_status = "pending"
+        
+    elif current_date > end_date:
+        # Plan terminé
+        effective_elapsed_days = total_days
+        remaining_days = 0
+        completion_percentage = 100.0
+        is_started = True
+        is_completed = True
+        status_label = f"Terminé le {end_date.strftime('%d/%m/%Y')}"
+        status_color = "#4CAF50"
+        plan_status = "completed"
+        
+    else:
+        # Plan en cours
+        completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
+        remaining_days = max(0, total_days - effective_elapsed_days)
+        is_started = True
+        is_completed = False
+        status_label = f"Jour {effective_elapsed_days}/{total_days}"
+        status_color = "#2196F3"
+        current_day = effective_elapsed_days
+        plan_status = "active"
+    
+    return {
+        "total_days": total_days,
+        "elapsed_days": effective_elapsed_days,  # ✅ Jours effectifs (sans pauses)
+        "raw_elapsed_days": min((current_date - start_date).days + 1, total_days) if current_date >= start_date else 0,  # ✅ Jours bruts
+        "paused_days": total_paused_days,  # ✅ Total jours en pause
+        "remaining_days": remaining_days,
+        "completion_percentage": completion_percentage,
+        "current_date": current_date.isoformat(),
+        "current_day": current_day,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "is_started": is_started,
+        "is_completed": is_completed,
+        "status_label": status_label,
+        "status_color": status_color,
+        "plan_status": plan_status,
+        "current_plan_status": current_plan_status,  # ✅ Statut système (active/paused/completed)
+        "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
+        "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0,
+        
+        # ✅ Infos spécifiques aux pauses
+        "pause_info": {
+            "is_paused": current_plan_status == "paused",
+            "total_paused_days": total_paused_days,
+            "current_pause": get_current_pause_info(plan) if current_plan_status == "paused" else None
+        }
+    }
+
+def calculate_total_paused_days(pause_history, current_date):
+    """Calculer le nombre total de jours en pause"""
+    from datetime import datetime
+    
+    total_days = 0
+    
+    for pause in pause_history:
+        pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        
+        if pause["resume_date"]:
+            pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+        else:
+            # Pause active - compter jusqu'à aujourd'hui
+            pause_end = min(current_date, datetime.now().date())
+        
+        if pause_end >= pause_start:
+            total_days += (pause_end - pause_start).days + 1
+    
+    return total_days
+
+def calculate_paused_days_in_period(pause_history, start_date, end_date):
+    """Calculer les jours en pause dans une période donnée"""
+    from datetime import datetime
+    
+    paused_days = 0
+    
+    for pause in pause_history:
+        pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        
+        if pause["resume_date"]:
+            pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+        else:
+            # Pause active
+            pause_end = datetime.now().date()
+        
+        # Calculer l'intersection entre la période de pause et la période demandée
+        overlap_start = max(pause_start, start_date)
+        overlap_end = min(pause_end, end_date)
+        
+        if overlap_end >= overlap_start:
+            paused_days += (overlap_end - overlap_start).days + 1
+    
+    return paused_days

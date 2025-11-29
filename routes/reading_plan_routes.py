@@ -13,166 +13,18 @@ from schemas.reading_plan_schema import (
 )
 from services.reading_plan_service import (
     create_simple_plan_service,
-    get_simple_plans_service,
-    get_simple_plan_detail_service,
-    subscribe_to_simple_plan_service,
-    get_user_simple_plans_service,
-    mark_day_completed_service,
-    get_current_reading_service,
-    search_simple_plans_service
+    get_simple_plan_details_service, 
+    get_user_simple_plans_service
 )
 
 reading_plan_bp = Blueprint("simple_plans", __name__, url_prefix="/api/simple-plans")
 
-@reading_plan_bp.route("", methods=["GET"])
-@jwt_required()
-def get_simple_plans():
-    """
-    Récupérer les plans de lecture simples
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: query
-        name: book_focus
-        schema:
-          type: string
-        required: false
-        description: Filtrer par livre(s) (séparés par des virgules)
-        example: "Psaumes,Proverbes"
-      - in: query
-        name: duration_months
-        schema:
-          type: integer
-        required: false
-        description: Filtrer par durée en mois
-        example: 2
-      - in: query
-        name: search
-        schema:
-          type: string
-        required: false
-        description: Terme de recherche
-        example: "méditation"
-      - in: query
-        name: page
-        schema:
-          type: integer
-          default: 1
-        required: false
-        description: Numéro de page
-        example: 1
-      - in: query
-        name: per_page
-        schema:
-          type: integer
-          default: 20
-        required: false
-        description: Nombre d'éléments par page
-        example: 20
-    responses:
-      200:
-        description: Plans récupérés avec succès
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Plans de lecture récupérés avec succès"
-                data:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      _id:
-                        type: string
-                        example: "507f1f77bcf86cd799439060"
-                      title:
-                        type: string
-                        example: "Psaumes et Proverbes"
-                      subtitle:
-                        type: string
-                        example: "Méditation quotidienne"
-                      description:
-                        type: string
-                      settings:
-                        type: object
-                        properties:
-                          duration_months:
-                            type: integer
-                          daily_chapters:
-                            type: integer
-                      meta:
-                        type: object
-                        properties:
-                          emoji:
-                            type: string
-                          color:
-                            type: string
-                      stats:
-                        type: object
-                        properties:
-                          subscribers:
-                            type: integer
-                          completions:
-                            type: integer
-                total:
-                  type: integer
-                page:
-                  type: integer
-                per_page:
-                  type: integer
-                total_pages:
-                  type: integer
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-
-    try:
-        # Préparer les filtres
-        filters = {}
-        
-        if request.args.get("book_focus"):
-            filters["book_focus"] = request.args.get("book_focus").split(",")
-        
-        if request.args.get("duration_months"):
-            try:
-                filters["duration_months"] = int(request.args.get("duration_months"))
-            except:
-                pass
-        
-        if request.args.get("search"):
-            filters["search"] = request.args.get("search")
-        
-        page = int(request.args.get("page", 1))
-        per_page = int(request.args.get("per_page", 20))
-        
-        result = get_simple_plans_service(filters if filters else None, page, per_page)
-        
-        return jsonify({
-            "message": "Plans de lecture récupérés avec succès",
-            **result
-        }), 200
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
+ 
 @reading_plan_bp.route("/<plan_id>", methods=["GET"])
 @jwt_required()
-def get_simple_plan(plan_id):
+def get_simple_plan_details(plan_id):
     """
-    Récupérer les détails d'un plan simple
+    Récupérer les détails complets d'un plan de lecture
     ---
     tags:
       - Simple Reading Plans
@@ -183,125 +35,97 @@ def get_simple_plan(plan_id):
         schema:
           type: string
         description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
       - in: path
         name: plan_id
         required: true
         schema:
           type: string
-        description: ID du plan
-        example: "507f1f77bcf86cd799439060"
+        description: ID du plan de lecture
+      - in: query
+        name: include_all_days
+        schema:
+          type: boolean
+          default: false
+        description: Inclure tous les jours du plan (sinon seulement les 5 jours pertinents)
     responses:
       200:
         description: Détails du plan récupérés avec succès
-        content:
-          application/json:
-            schema:
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            data:
               type: object
               properties:
+                _id:
+                  type: string
                 title:
                   type: string
-                  example: "Psaumes et Proverbes"
-                subtitle:
-                  type: string
-                  example: "Méditation quotidienne"
                 description:
                   type: string
-                  example: "Car l'Éternel donne la sagesse; De sa bouche sortent la connaissance et l'intelligence - Proverbes 2:6"
-                duration:
+                emoji:
+                  type: string
+                color:
+                  type: string
+                start_date:
+                  type: string
+                end_date:
+                  type: string
+                duration_months:
+                  type: integer
+                has_notifications:
+                  type: boolean
+                notification_settings:
                   type: object
-                  properties:
-                    months:
-                      type: integer
-                      example: 2
-                    label:
-                      type: string
-                      example: "2 mois"
-                daily_reading:
-                  type: object
-                  properties:
-                    chapters:
-                      type: integer
-                      example: 2
-                    label:
-                      type: string
-                      example: "2 chapitres par jour"
-                notifications:
-                  type: object
-                  properties:
-                    available:
-                      type: boolean
-                      example: true
-                    label:
-                      type: string
-                      example: "Notifications quotidiennes disponibles"
-                auto_save:
-                  type: object
-                  properties:
-                    enabled:
-                      type: boolean
-                      example: true
-                    label:
-                      type: string
-                      example: "Progression automatiquement sauvegardée"
-                schedule_preview:
+                is_owner:
+                  type: boolean
+                  description: "Si l'utilisateur actuel est le créateur"
+                days:
                   type: array
-                  items:
-                    type: object
-                    properties:
-                      day:
-                        type: integer
-                        example: 1
-                      label:
-                        type: string
-                        example: "Jour 1"
-                      passages:
-                        type: array
-                        items:
-                          type: string
-                        example: ["Genèse 1-3"]
-                      estimated_time:
-                        type: integer
-                        example: 15
-                meta:
+                  description: "Jours du plan (5 pertinents ou tous selon le paramètre)"
+                progression:
                   type: object
                   properties:
-                    emoji:
-                      type: string
-                      example: "💛"
-                    color:
-                      type: string
-                      example: "#FFA726"
-                stats:
-                  type: object
-                  properties:
-                    subscribers:
+                    total_days:
                       type: integer
-                      example: 245
-                    completions:
+                    elapsed_days:
                       type: integer
-                      example: 89
-                    avg_rating:
+                    completion_percentage:
                       type: number
-                      example: 4.5
+                    status_label:
+                      type: string
+                    current_day:
+                      type: integer
       404:
         description: Plan non trouvé
+      403:
+        description: Accès non autorisé
       401:
         description: Token JWT manquant ou invalide
       500:
         description: Erreur serveur
     """
     try:
-        result = get_simple_plan_detail_service(plan_id)
+        current_user_id = get_jwt_identity()
+        include_all_days = request.args.get("include_all_days", "false").lower() == "true"
         
-        if isinstance(result, tuple):
-            return jsonify(result[0]), result[1]
+        # Récupérer les détails du plan
+        plan_details = get_simple_plan_details_service(plan_id, current_user_id, include_all_days)
         
-        return jsonify(result), 200
+        if not plan_details:
+            return jsonify({"message": "Plan non trouvé ou accès non autorisé"}), 404
         
+        return jsonify({
+            "message": "Détails du plan récupérés avec succès",
+            "data": plan_details
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
+    
 @reading_plan_bp.route("/create", methods=["POST"])
 @jwt_required()
 def create_simple_plan():
@@ -466,152 +290,7 @@ def create_simple_plan():
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
-@reading_plan_bp.route("/<plan_id>/start", methods=["POST"])
-@jwt_required()
-def start_simple_plan(plan_id):
-    """
-    Commencer un plan avec préférences de notification personnalisées
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: plan_id
-        required: true
-        schema:
-          type: string
-      - in: body
-        name: body
-        required: false
-        description: Préférences de notification personnalisées
-        schema:
-          type: object
-          properties:
-            reminder_time:
-              type: string
-              example: "07:00"
-            reminder_enabled:
-              type: boolean
-              example: true
-            notification_preferences:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                  example: true
-                reminder_time:
-                  type: string
-                  example: "08:00"
-                  description: "Heure de rappel personnalisée"
-                frequency:
-                  type: string
-                  enum: [daily, weekly, custom]
-                  example: "daily"
-                days_of_week:
-                  type: array
-                  items:
-                    type: integer
-                    minimum: 0
-                    maximum: 6
-                  example: [1, 2, 3, 4, 5, 6]
-                  description: "Jours actifs (lun-sam)"
-                recurrence:
-                  type: object
-                  properties:
-                    type:
-                      type: string
-                      enum: [daily, weekly, monthly]
-                      example: "daily"
-                    interval:
-                      type: integer
-                      example: 1
-                      description: "Tous les X jours/semaines"
-                    custom_pattern:
-                      type: string
-                      example: "Tous les matins sauf dimanche"
-                advance_reminders:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      minutes:
-                        type: integer
-                      hours:
-                        type: integer
-                  example: [{"minutes": 15}, {"hours": 1}]
-                  description: "Rappels en avance"
-                reminder_types:
-                  type: array
-                  items:
-                    type: string
-                    enum: [push, email, sms]
-                  example: ["push", "email"]
-                custom_message:
-                  type: string
-                  example: "Il est temps de lire la Bible !"
-                snooze_options:
-                  type: array
-                  items:
-                    type: integer
-                  example: [5, 15, 30]
-                  description: "Options de report en minutes"
-                quiet_hours:
-                  type: object
-                  properties:
-                    enabled:
-                      type: boolean
-                      example: true
-                    start_time:
-                      type: string
-                      example: "22:00"
-                      description: "Début des heures de silence"
-                    end_time:
-                      type: string
-                      example: "06:00"
-                      description: "Fin des heures de silence"
-                  description: "Heures de silence (pas de notifications)"
-    responses:
-      201:
-        description: Plan commencé avec succès
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Inscription au plan réussie"
-            user_plan_id:
-              type: string
-              example: "507f1f77bcf86cd799439061"
-      400:
-        description: Déjà inscrit ou données invalides
-      404:
-        description: Plan non trouvé
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-    try:
-        current_user_id = get_jwt_identity()
-        data = request.get_json() or {}
-        
-        # ✅ Validation sans plan_id
-        errors = SubscribeSimplePlanSchema().validate(data)
-        if errors:
-            return jsonify({"errors": errors}), 400
-        
-        result, status = subscribe_to_simple_plan_service(plan_id, current_user_id, data)
-        
-        return jsonify(result), status
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
+ 
 
 @reading_plan_bp.route("/my-plans", methods=["GET"])
 @jwt_required()
@@ -707,382 +386,7 @@ def get_my_simple_plans():
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
     
-
-@reading_plan_bp.route("/user-plan/<user_plan_id>/complete-day", methods=["POST"])
-@jwt_required()
-def complete_day(user_plan_id):
-    """
-    Marquer un jour comme complété
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: path
-        name: user_plan_id
-        required: true
-        schema:
-          type: string
-        description: ID du plan utilisateur
-        example: "507f1f77bcf86cd799439061"
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - day
-            properties:
-              day:
-                type: integer
-                example: 1
-                description: "Numéro du jour à marquer comme complété"
-    responses:
-      200:
-        description: Jour marqué comme complété
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Jour marqué comme complété"
-                current_day:
-                  type: integer
-                  example: 2
-      400:
-        description: Données invalides
-      404:
-        description: Plan non trouvé
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-    try:
-        data = request.get_json()
-        
-        # Validation des données
-        errors = MarkDayCompletedSchema().validate(data)
-        if errors:
-            return jsonify({"errors": errors}), 400
-        
-        result, status = mark_day_completed_service(user_plan_id, data["day"])
-        
-        return jsonify(result), status
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
-@reading_plan_bp.route("/user-plan/<user_plan_id>/current", methods=["GET"])
-@jwt_required()
-def get_current_reading(user_plan_id):
-    """
-    Récupérer la lecture actuelle
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: path
-        name: user_plan_id
-        required: true
-        schema:
-          type: string
-        description: ID du plan utilisateur
-        example: "507f1f77bcf86cd799439061"
-    responses:
-      200:
-        description: Lecture actuelle récupérée
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Lecture actuelle récupérée avec succès"
-                data:
-                  type: object
-                  properties:
-                    current_reading:
-                      type: object
-                      properties:
-                        day:
-                          type: integer
-                          example: 1
-                        label:
-                          type: string
-                          example: "Jour 1"
-                        passages:
-                          type: array
-                          items:
-                            type: string
-                          example: ["Genèse 1-3"]
-                        estimated_time:
-                          type: integer
-                          example: 15
-                    progress:
-                      type: object
-                      properties:
-                        current_day:
-                          type: integer
-                        completed_days:
-                          type: array
-                          items:
-                            type: integer
-                        completion_percentage:
-                          type: number
-                    plan_title:
-                      type: string
-                      example: "Psaumes et Proverbes"
-      404:
-        description: Plan non trouvé
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-    try:
-        result = get_current_reading_service(user_plan_id)
-        
-        if isinstance(result, tuple):
-            return jsonify(result[0]), result[1]
-        
-        return jsonify({
-            "message": "Lecture actuelle récupérée avec succès",
-            "data": result
-        }), 200
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
-@reading_plan_bp.route("/search", methods=["GET"])
-@jwt_required()
-def search_simple_plans():
-    """
-    Rechercher dans les plans simples
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: query
-        name: q
-        required: true
-        schema:
-          type: string
-        description: Terme de recherche
-        example: "psaumes"
-    responses:
-      200:
-        description: Résultats de recherche
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Résultats de recherche récupérés avec succès"
-                data:
-                  type: array
-                  items:
-                    type: object
-                total:
-                  type: integer
-      400:
-        description: Terme de recherche manquant
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                  example: "Terme de recherche requis (paramètre 'q')"
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-    try:
-        search_term = request.args.get("q")
-        
-        if not search_term:
-            return jsonify({"message": "Terme de recherche requis (paramètre 'q')"}), 400
-        
-        plans = search_simple_plans_service(search_term)
-        
-        return jsonify({
-            "message": "Résultats de recherche récupérés avec succès",
-            "data": plans,
-            "total": len(plans)
-        }), 200
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
-
- 
-@reading_plan_bp.route("/user-plan/<user_plan_id>/notification-settings", methods=["PUT"])
-@jwt_required()
-def update_notification_settings(user_plan_id):
-    """
-    Mettre à jour les paramètres de notification d'un plan utilisateur
-    ---
-    tags:
-      - Simple Reading Plans
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
-        description: Token JWT de l'utilisateur
-        example: "Bearer votre.jwt.token"
-      - in: path
-        name: user_plan_id
-        required: true
-        schema:
-          type: string
-        description: ID du plan utilisateur
-        example: "507f1f77bcf86cd799439061"
-      - in: body
-        name: body
-        required: true
-        description: Nouveaux paramètres de notification
-        schema:
-          type: object
-          properties:
-            enabled:
-              type: boolean
-              example: true
-              description: "Activer/désactiver les notifications"
-            reminder_time:
-              type: string
-              example: "08:30"
-              description: "Nouvelle heure de rappel"
-            frequency:
-              type: string
-              enum: [daily, weekly, custom]
-              example: "weekly"
-              description: "Fréquence des notifications"
-            days_of_week:
-              type: array
-              items:
-                type: integer
-                minimum: 0
-                maximum: 6
-              example: [1, 3, 5]
-              description: "Jours spécifiques (lun, mer, ven)"
-            recurrence:
-              type: object
-              properties:
-                type:
-                  type: string
-                  enum: [daily, weekly, monthly]
-                  example: "weekly"
-                interval:
-                  type: integer
-                  example: 2
-                  description: "Toutes les 2 semaines"
-                custom_pattern:
-                  type: string
-                  example: "Tous les 3 jours"
-            advance_reminders:
-              type: array
-              items:
-                type: object
-                properties:
-                  minutes:
-                    type: integer
-                    example: 30
-                  hours:
-                    type: integer
-                    example: 2
-              example: [{"minutes": 30}, {"hours": 2}]
-            reminder_types:
-              type: array
-              items:
-                type: string
-                enum: [push, email, sms]
-              example: ["push", "email"]
-            custom_message:
-              type: string
-              example: "Moment de méditation biblique !"
-              description: "Message personnalisé pour les rappels"
-            snooze_options:
-              type: array
-              items:
-                type: integer
-              example: [10, 30, 60]
-              description: "Options de report (minutes)"
-            quiet_hours:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                  example: true
-                start_time:
-                  type: string
-                  example: "21:30"
-                end_time:
-                  type: string
-                  example: "07:00"
-              description: "Plage horaire sans notifications"
-    responses:
-      200:
-        description: Paramètres mis à jour avec succès
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Paramètres de notification mis à jour"
-      404:
-        description: Plan utilisateur non trouvé
-      401:
-        description: Token JWT manquant ou invalide
-      500:
-        description: Erreur serveur
-    """
-    try:
-        data = request.get_json()
-        
-        result = UserSimplePlanModel.get_collection().update_one(
-            {"_id": ObjectId(user_plan_id)},
-            {"$set": {"notification_preferences": data}}
-        )
-        
-        if result.modified_count == 0:
-            return jsonify({"message": "Plan non trouvé ou aucune modification"}), 404
-        
-        return jsonify({"message": "Paramètres de notification mis à jour"}), 200
-        
-    except Exception as e:
-        return jsonify({"message": f"Erreur : {str(e)}"}), 500
-    
-
+  
 @reading_plan_bp.route("/user-plan/<user_plan_id>", methods=["DELETE"])
 @jwt_required()
 def delete_user_plan(user_plan_id):
@@ -1149,96 +453,80 @@ def delete_user_plan(user_plan_id):
     except Exception as e:
         return jsonify({"message": f"Erreur : {str(e)}"}), 500
     
-
-@reading_plan_bp.route("/user-plan/<user_plan_id>/pause", methods=["POST"])
+  
+@reading_plan_bp.route("/<plan_id>/pause", methods=["POST"])
 @jwt_required()
-def pause_plan(user_plan_id):
+def pause_plan(plan_id):
     """
-    Mettre en pause un plan de lecture
+    Mettre un plan en pause
     ---
     tags:
       - Simple Reading Plans
     parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
       - in: path
-        name: user_plan_id
+        name: plan_id
         required: true
         schema:
           type: string
-    responses:
-      200:
-        description: Plan mis en pause avec succès
+      - in: body
+        name: body
         schema:
           type: object
           properties:
-            message:
+            reason:
               type: string
-              example: "Plan mis en pause avec succès"
-            status:
+              example: "Voyage de 5 jours"
+            pause_date:
               type: string
-              example: "paused"
-      404:
-        description: Plan non trouvé
-      401:
-        description: Token JWT invalide
+              format: date
+              example: "2025-11-30"
+              description: "Date de pause (défaut: aujourd'hui)"
     """
     try:
-        result = UserSimplePlanModel.get_collection().update_one(
-            {"_id": ObjectId(user_plan_id)},
-            {"$set": {"status": "paused", "paused_at": datetime.utcnow()}}
-        )
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
         
-        if result.modified_count == 0:
-            return jsonify({"message": "Plan non trouvé"}), 404
-        
-        return jsonify({
-            "message": "Plan mis en pause avec succès",
-            "status": "paused"
-        }), 200
+        result = pause_plan_service(plan_id, current_user_id, data)
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({"message": f"Erreur : {str(e)}"}), 500
 
-@reading_plan_bp.route("/user-plan/<user_plan_id>/resume", methods=["POST"])
+@reading_plan_bp.route("/<plan_id>/resume", methods=["POST"])
 @jwt_required()
-def resume_plan(user_plan_id):
+def resume_plan(plan_id):
     """
     Reprendre un plan en pause
     ---
     tags:
       - Simple Reading Plans
     parameters:
-      - in: header
-        name: Authorization
-        required: true
-        schema:
-          type: string
       - in: path
-        name: user_plan_id
+        name: plan_id
         required: true
         schema:
           type: string
-    responses:
-      200:
-        description: Plan repris avec succès
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            resume_date:
+              type: string
+              format: date
+              example: "2025-12-05"
+              description: "Date de reprise (défaut: aujourd'hui)"
+            adjust_schedule:
+              type: boolean
+              example: true
+              description: "Ajuster les dates futures (défaut: true)"
     """
     try:
-        result = UserSimplePlanModel.get_collection().update_one(
-            {"_id": ObjectId(user_plan_id)},
-            {"$set": {"status": "active"}, "$unset": {"paused_at": ""}}
-        )
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
         
-        if result.modified_count == 0:
-            return jsonify({"message": "Plan non trouvé"}), 404
-        
-        return jsonify({
-            "message": "Plan repris avec succès",
-            "status": "active"
-        }), 200
+        result = resume_plan_service(plan_id, current_user_id, data)
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({"message": f"Erreur : {str(e)}"}), 500
