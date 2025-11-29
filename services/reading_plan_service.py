@@ -195,75 +195,119 @@ def get_plan_status(progression):
 
 def get_user_simple_plans_service(user_id, status_filter=None):
     """
-    Récupérer les plans créés par l'utilisateur avec calcul de progression automatique
+    Récupérer les plans créés par l'utilisateur avec gestion des anciens formats
     """
     from datetime import datetime, date
     from models.reading_plan_model import SimpleReadingPlanModel
     
-    # Récupérer tous les plans créés par l'utilisateur
-    plan_filters = {"meta.created_by": ObjectId(user_id)}
-    plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
-    
-    result = []
-    current_date = date.today()
-    
-    for plan in plans:
-        # Générer tous les jours du plan
-        plan_days = generate_plan_days(
-            plan["settings"]["start_date"], 
-            plan["settings"]["end_date"]
-        )
+    try:
+        # Récupérer tous les plans créés par l'utilisateur
+        plan_filters = {"meta.created_by": ObjectId(user_id)}
+        plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
         
-        # Calcul de la progression automatique
-        progression = calculate_plan_progression(plan, current_date, plan_days)
+        result = []
+        current_date = date.today()
         
-        # Filtrer par statut si demandé
-        if status_filter:
-            plan_status = get_plan_status(progression)
-            if plan_status != status_filter:
-                continue
+        for plan in plans:
+            try:
+                # Calcul de la progression automatique avec gestion d'erreurs
+                progression = calculate_plan_progression(plan, current_date)
+                
+                # Générer les jours après avoir calculé les dates
+                plan_days = generate_plan_days(
+                    progression["start_date"], 
+                    progression["end_date"]
+                )
+                
+                # Filtrer par statut si demandé
+                if status_filter:
+                    plan_status = get_plan_status(progression)
+                    if plan_status != status_filter:
+                        continue
+                
+                # ✅ Gérer les champs manquants
+                settings = plan.get("settings", {})
+                meta = plan.get("meta", {})
+                
+                plan_item = {
+                    "_id": str(plan["_id"]),
+                    "title": plan.get("title", "Plan sans titre"),
+                    "description": plan.get("description", "Aucune description"),
+                    "emoji": meta.get("emoji", "📖"),
+                    "color": meta.get("color", "#2196F3"),
+                    "start_date": progression["start_date"],
+                    "end_date": progression["end_date"],
+                    "duration_months": settings.get("duration_months", 1),
+                    "has_notifications": settings.get("has_notifications", True),
+                    "created_at": meta.get("created_at", datetime.utcnow()),
+                    "days": plan_days,
+                    "progression": progression
+                }
+                
+                result.append(plan_item)
+                
+            except Exception as e:
+                print(f"Erreur lors du traitement du plan {plan.get('_id')}: {str(e)}")
+                continue  # Ignorer ce plan et continuer avec les autres
         
-        plan_item = {
-            "_id": str(plan["_id"]),
-            "title": plan["title"],
-            "description": plan["description"],
-            "emoji": plan["meta"]["emoji"],
-            "color": plan["meta"]["color"],
-            "start_date": plan["settings"]["start_date"],
-            "end_date": plan["settings"]["end_date"],
-            "duration_months": plan["settings"]["duration_months"],
-            "has_notifications": plan["settings"]["has_notifications"],
-            "created_at": plan["meta"]["created_at"],
-            "days": plan_days,  # ✅ Tous les jours du plan
-            "progression": progression
-        }
+        # Trier par date de création (plus récent en premier)
+        result.sort(key=lambda x: x["created_at"], reverse=True)
         
-        result.append(plan_item)
-    
-    # Trier par date de création (plus récent en premier)
-    result.sort(key=lambda x: x["created_at"], reverse=True)
-    
-    return result
-def calculate_plan_progression(plan, current_date, plan_days):
+        return result
+        
+    except Exception as e:
+        print(f"Erreur dans get_user_simple_plans_service: {str(e)}")
+        return []
+def calculate_plan_progression(plan, current_date, plan_days=None):
     """
-    Calcul automatique de progression basé uniquement sur les dates
+    Calcul automatique de progression avec compatibilité anciens plans
     """
-    from datetime import datetime, date
+    from datetime import datetime, date, timedelta
     
-    # Récupérer les dates du plan
-    start_date_str = plan["settings"]["start_date"]
-    end_date_str = plan["settings"]["end_date"]
+    # ✅ Vérifier si c'est un ancien plan ou nouveau plan
+    settings = plan.get("settings", {})
     
-    # Convertir en objets date
-    if isinstance(start_date_str, str):
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-    else:
-        start_date = start_date_str
+    # Nouveau format avec start_date/end_date
+    if "start_date" in settings and "end_date" in settings:
+        start_date_str = settings["start_date"]
+        end_date_str = settings["end_date"]
         
-    if isinstance(end_date_str, str):
-        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        # Convertir en objets date
+        if isinstance(start_date_str, str):
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        else:
+            start_date = start_date_str
+            
+        if isinstance(end_date_str, str):
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        else:
+            end_date = end_date_str
+    
+    # Ancien format - calculer à partir de created_at + duration_months
     else:
-        end_date = end_date_str
+        duration_months = settings.get("duration_months", 1)
+        created_at = plan.get("meta", {}).get("created_at")
+        
+        if created_at:
+            # Utiliser created_at comme start_date
+            if hasattr(created_at, 'date'):
+                start_date = created_at.date()
+            else:
+                start_date = datetime.strptime(str(created_at)[:10], "%Y-%m-%d").date()
+            
+            # Calculer end_date
+            end_date = start_date.replace(
+                year=start_date.year + (start_date.month + duration_months - 1) // 12,
+                month=(start_date.month + duration_months - 1) % 12 + 1
+            )
+        else:
+            # Fallback - utiliser la date actuelle
+            start_date = current_date
+            end_date = current_date + timedelta(days=30 * duration_months)
+    
+    # Générer les jours si pas fournis
+    if plan_days is None:
+        plan_days = generate_plan_days(start_date, end_date)
     
     # Calculs temporels
     total_days = len(plan_days)
@@ -277,7 +321,6 @@ def calculate_plan_progression(plan, current_date, plan_days):
     
     # Déterminer le statut selon la date actuelle
     if current_date < start_date:
-        # Plan pas encore commencé
         elapsed_days = 0
         remaining_days = total_days
         completion_percentage = 0.0
@@ -287,7 +330,6 @@ def calculate_plan_progression(plan, current_date, plan_days):
         status_color = "#9E9E9E"
         
     elif current_date > end_date:
-        # Plan terminé
         elapsed_days = total_days
         remaining_days = 0
         completion_percentage = 100.0
@@ -297,7 +339,6 @@ def calculate_plan_progression(plan, current_date, plan_days):
         status_color = "#4CAF50"
         
     else:
-        # Plan en cours
         elapsed_days = (current_date - start_date).days + 1
         remaining_days = max(0, total_days - elapsed_days)
         completion_percentage = round((elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
@@ -312,15 +353,13 @@ def calculate_plan_progression(plan, current_date, plan_days):
         "remaining_days": remaining_days,
         "completion_percentage": completion_percentage,
         "current_date": current_date.isoformat(),
-        "current_day": current_day,  # ✅ Jour actuel dans le plan
+        "current_day": current_day,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "is_started": is_started,
         "is_completed": is_completed,
         "status_label": status_label,
         "status_color": status_color,
-        
-        # Informations supplémentaires
         "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
         "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0
     }
