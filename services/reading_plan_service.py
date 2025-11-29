@@ -239,13 +239,12 @@ def get_plan_status(progression):
 
 def get_user_simple_plans_service(user_id, status_filter=None):
     """
-    Récupérer les plans avec seulement 5 jours pertinents pour l'API rapide
+    Récupérer TOUS les plans avec des jours optimisés selon leur statut
     """
     from datetime import datetime, date
     from models.reading_plan_model import SimpleReadingPlanModel
     
     try:
-        # Récupérer tous les plans créés par l'utilisateur
         plan_filters = {"meta.created_by": ObjectId(user_id)}
         plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
         
@@ -254,22 +253,20 @@ def get_user_simple_plans_service(user_id, status_filter=None):
         
         for plan in plans:
             try:
-                # Calcul de la progression automatique avec gestion d'erreurs
+                # ✅ Calcul de la progression pour TOUS les plans
                 progression = calculate_plan_progression(plan, current_date)
                 
-                # ✅ Générer seulement 5 jours pertinents (2 passés + aujourd'hui + 2 futurs)
+                # ✅ Générer les jours selon le statut du plan
                 relevant_days = generate_relevant_plan_days(
                     progression["start_date"], 
                     progression["end_date"],
                     current_date,
-                    days_before=2,
-                    days_after=2
+                    plan_status=progression["plan_status"]
                 )
                 
-                # Filtrer par statut si demandé
+                # ✅ Filtrer par statut SEULEMENT si demandé
                 if status_filter:
-                    plan_status = get_plan_status(progression)
-                    if plan_status != status_filter:
+                    if progression["plan_status"] != status_filter:
                         continue
                 
                 settings = plan.get("settings", {})
@@ -286,7 +283,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     "duration_months": settings.get("duration_months", 1),
                     "has_notifications": settings.get("has_notifications", True),
                     "created_at": meta.get("created_at", datetime.utcnow()),
-                    "relevant_days": relevant_days,  # ✅ Seulement 5 jours
+                    "relevant_days": relevant_days,
                     "progression": progression
                 }
                 
@@ -296,14 +293,13 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                 print(f"Erreur lors du traitement du plan {plan.get('_id')}: {str(e)}")
                 continue
         
-        # Trier par date de création (plus récent en premier)
         result.sort(key=lambda x: x["created_at"], reverse=True)
-        
         return result
         
     except Exception as e:
         print(f"Erreur dans get_user_simple_plans_service: {str(e)}")
         return []
+    
 
 def calculate_plan_progression(plan, current_date, plan_days=None):
     """
@@ -407,69 +403,53 @@ def mark_day_completed_service(user_plan_id, day):
     result, status = UserSimplePlanModel.mark_day_completed(user_plan_id, day)
     return result, status
 
-def get_user_simple_plans_service(user_id, status_filter=None):
-    """
-    Récupérer TOUS les plans avec des jours optimisés selon leur statut
-    """
-    from datetime import datetime, date
-    from models.reading_plan_model import SimpleReadingPlanModel
-    
+def get_current_reading_service(user_plan_id):
+    """Récupérer la lecture actuelle"""
     try:
-        plan_filters = {"meta.created_by": ObjectId(user_id)}
-        plans = SimpleReadingPlanModel.get_all_plans(plan_filters, 0, 100)
+        print(f"DEBUG: Recherche user_plan_id = {user_plan_id}")
         
-        result = []
-        current_date = date.today()
+        user_plan = UserSimplePlanModel.get_collection().find_one({"_id": ObjectId(user_plan_id)})
         
-        for plan in plans:
-            try:
-                # ✅ Calcul de la progression pour TOUS les plans
-                progression = calculate_plan_progression(plan, current_date)
-                
-                # ✅ Générer les jours selon le statut du plan
-                relevant_days = generate_relevant_plan_days(
-                    progression["start_date"], 
-                    progression["end_date"],
-                    current_date,
-                    plan_status=progression["plan_status"]
-                )
-                
-                # ✅ Filtrer par statut SEULEMENT si demandé
-                if status_filter:
-                    if progression["plan_status"] != status_filter:
-                        continue
-                
-                settings = plan.get("settings", {})
-                meta = plan.get("meta", {})
-                
-                plan_item = {
-                    "_id": str(plan["_id"]),
-                    "title": plan.get("title", "Plan sans titre"),
-                    "description": plan.get("description", "Aucune description"),
-                    "emoji": meta.get("emoji", "📖"),
-                    "color": meta.get("color", "#2196F3"),
-                    "start_date": progression["start_date"],
-                    "end_date": progression["end_date"],
-                    "duration_months": settings.get("duration_months", 1),
-                    "has_notifications": settings.get("has_notifications", True),
-                    "created_at": meta.get("created_at", datetime.utcnow()),
-                    "relevant_days": relevant_days,
-                    "progression": progression
-                }
-                
-                result.append(plan_item)
-                
-            except Exception as e:
-                print(f"Erreur lors du traitement du plan {plan.get('_id')}: {str(e)}")
-                continue
+        if not user_plan:
+            print(f"DEBUG: Aucun user_plan trouvé avec l'ID {user_plan_id}")
+            return {"message": "Plan utilisateur non trouvé"}, 404
         
-        result.sort(key=lambda x: x["created_at"], reverse=True)
-        return result
+        print(f"DEBUG: User plan trouvé: {user_plan}")
+        
+        current_day = user_plan["progress"]["current_day"]
+        print(f"DEBUG: Current day = {current_day}")
+        
+        # Récupérer le plan pour obtenir la lecture du jour
+        plan = SimpleReadingPlanModel.get_plan_by_id(user_plan["plan_id"])
+        if not plan:
+            print(f"DEBUG: Plan principal non trouvé avec l'ID {user_plan['plan_id']}")
+            return {"message": "Plan non trouvé"}, 404
+        
+        print(f"DEBUG: Plan principal trouvé: {plan['title']}")
+        
+        # Trouver la lecture du jour actuel
+        current_reading = None
+        for reading in plan["content"]["reading_schedule"]:
+            if reading["day"] == current_day:
+                current_reading = reading
+                break
+        
+        if not current_reading:
+            print(f"DEBUG: Aucune lecture trouvée pour le jour {current_day}")
+            return {"message": "Lecture du jour non trouvée"}, 404
+        
+        print(f"DEBUG: Lecture trouvée: {current_reading}")
+        
+        return {
+            "current_reading": current_reading,
+            "progress": user_plan["progress"],
+            "plan_title": plan["title"]
+        }
         
     except Exception as e:
-        print(f"Erreur dans get_user_simple_plans_service: {str(e)}")
-        return []
-    
+        print(f"DEBUG: Exception = {str(e)}")
+        return {"message": f"Erreur : {str(e)}"}, 500
+
 def search_simple_plans_service(search_term):
     """Rechercher dans les plans simples"""
     filters = {"search": search_term}
