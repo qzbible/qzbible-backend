@@ -148,8 +148,11 @@ def get_user_simple_plans_service(user_id, status=None):
     
     return user_plans
 
-def generate_plan_days(start_date, end_date):
-    """Générer tous les jours du plan de lecture"""
+def generate_relevant_plan_days(start_date, end_date, current_date, days_before=2, days_after=2):
+    """
+    Générer seulement les jours pertinents autour de la date actuelle
+    Par défaut: 2 jours passés + aujourd'hui + 2 jours futurs = 5 jours
+    """
     from datetime import datetime, date, timedelta
     
     # Convertir en objets date si nécessaire
@@ -157,24 +160,38 @@ def generate_plan_days(start_date, end_date):
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if isinstance(current_date, str):
+        current_date = datetime.strptime(current_date, "%Y-%m-%d").date()
+    
+    # Déterminer la plage de dates à retourner
+    range_start = max(start_date, current_date - timedelta(days=days_before))
+    range_end = min(end_date, current_date + timedelta(days=days_after))
     
     days = []
-    current_date = start_date
-    day_number = 1
+    current_day_in_plan = (current_date - start_date).days + 1
     
-    while current_date <= end_date:
-        days.append({
-            "day": day_number,
-            "date": current_date.isoformat(),
-            "date_formatted": current_date.strftime("%d/%m/%Y"),
-            "weekday": current_date.strftime("%A"),
-            "weekday_fr": get_french_weekday(current_date.weekday()),
-            "is_today": current_date == date.today(),
-            "is_past": current_date < date.today(),
-            "is_future": current_date > date.today()
-        })
+    # Calculer le jour de départ dans le plan
+    start_day_number = (range_start - start_date).days + 1
+    
+    current_loop_date = range_start
+    day_number = start_day_number
+    
+    while current_loop_date <= range_end:
+        # S'assurer que nous sommes dans les limites du plan
+        if start_date <= current_loop_date <= end_date:
+            days.append({
+                "day": day_number,
+                "date": current_loop_date.isoformat(),
+                "date_formatted": current_loop_date.strftime("%d/%m/%Y"),
+                "weekday": current_loop_date.strftime("%A"),
+                "weekday_fr": get_french_weekday(current_loop_date.weekday()),
+                "is_today": current_loop_date == current_date,
+                "is_past": current_loop_date < current_date,
+                "is_future": current_loop_date > current_date,
+                "is_in_plan": True
+            })
         
-        current_date += timedelta(days=1)
+        current_loop_date += timedelta(days=1)
         day_number += 1
     
     return days
@@ -195,7 +212,7 @@ def get_plan_status(progression):
 
 def get_user_simple_plans_service(user_id, status_filter=None):
     """
-    Récupérer les plans créés par l'utilisateur avec gestion des anciens formats
+    Récupérer les plans avec seulement 5 jours pertinents pour l'API rapide
     """
     from datetime import datetime, date
     from models.reading_plan_model import SimpleReadingPlanModel
@@ -213,10 +230,13 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                 # Calcul de la progression automatique avec gestion d'erreurs
                 progression = calculate_plan_progression(plan, current_date)
                 
-                # Générer les jours après avoir calculé les dates
-                plan_days = generate_plan_days(
+                # ✅ Générer seulement 5 jours pertinents (2 passés + aujourd'hui + 2 futurs)
+                relevant_days = generate_relevant_plan_days(
                     progression["start_date"], 
-                    progression["end_date"]
+                    progression["end_date"],
+                    current_date,
+                    days_before=2,
+                    days_after=2
                 )
                 
                 # Filtrer par statut si demandé
@@ -225,7 +245,6 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     if plan_status != status_filter:
                         continue
                 
-                # ✅ Gérer les champs manquants
                 settings = plan.get("settings", {})
                 meta = plan.get("meta", {})
                 
@@ -240,7 +259,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     "duration_months": settings.get("duration_months", 1),
                     "has_notifications": settings.get("has_notifications", True),
                     "created_at": meta.get("created_at", datetime.utcnow()),
-                    "days": plan_days,
+                    "relevant_days": relevant_days,  # ✅ Seulement 5 jours
                     "progression": progression
                 }
                 
@@ -248,7 +267,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                 
             except Exception as e:
                 print(f"Erreur lors du traitement du plan {plan.get('_id')}: {str(e)}")
-                continue  # Ignorer ce plan et continuer avec les autres
+                continue
         
         # Trier par date de création (plus récent en premier)
         result.sort(key=lambda x: x["created_at"], reverse=True)
@@ -258,6 +277,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
     except Exception as e:
         print(f"Erreur dans get_user_simple_plans_service: {str(e)}")
         return []
+    
 def calculate_plan_progression(plan, current_date, plan_days=None):
     """
     Calcul automatique de progression avec compatibilité anciens plans
