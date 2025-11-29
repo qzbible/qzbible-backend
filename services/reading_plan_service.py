@@ -167,6 +167,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     "current_status": plan.get("current_status", "active"),
                     "is_paused": plan.get("current_status") == "paused",
                     "pause_info": get_current_pause_info(plan),
+                    "notification_settings": settings.get("notification_settings", {}),
                 }
                 
                 result.append(plan_item)

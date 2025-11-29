@@ -14,7 +14,9 @@ from schemas.reading_plan_schema import (
 from services.reading_plan_service import (
     create_simple_plan_service,
     get_simple_plan_details_service, 
-    get_user_simple_plans_service
+    get_user_simple_plans_service,
+    pause_plan_service,
+    resume_plan_service
 )
 
 reading_plan_bp = Blueprint("simple_plans", __name__, url_prefix="/api/simple-plans")
@@ -463,6 +465,11 @@ def pause_plan(plan_id):
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
       - in: path
         name: plan_id
         required: true
@@ -501,6 +508,11 @@ def resume_plan(plan_id):
     tags:
       - Simple Reading Plans
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
       - in: path
         name: plan_id
         required: true
