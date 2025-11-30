@@ -27,8 +27,8 @@ class NotificationSettingsSchema(Schema):
     """Schema pour les paramètres de notification"""
     enabled = fields.Boolean(missing=True)
     default_time = fields.String(missing="07:00")
-    frequency = fields.String(validate=validate.OneOf(["daily", "weekly", "monthly"]), missing="daily")
-    recurrence_pattern = fields.Nested(NotificationRecurrenceSchema, missing={})
+    # frequency = fields.String(validate=validate.OneOf(["daily", "weekly", "monthly"]), missing="daily")
+    
     reminder_types = fields.List(fields.String(validate=validate.OneOf(["notification", "email", "sms"])), missing=["notification"])
     advance_reminders = fields.List(fields.Dict(), missing=[])
     custom_message = fields.String(allow_none=True)
@@ -62,6 +62,7 @@ class CreateSimplePlanSchema(Schema):
     has_notifications = fields.Boolean(required=False, missing=True)
     auto_save_progress = fields.Boolean(required=False, missing=True)
     is_template = fields.Boolean(required=False, missing=False)
+    recurrence_pattern = fields.Nested(NotificationRecurrenceSchema, missing={})
     notification_settings = fields.Nested(NotificationSettingsSchema, missing={})
 
 class SubscribeSimplePlanSchema(Schema):

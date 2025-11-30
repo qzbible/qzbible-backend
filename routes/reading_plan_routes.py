@@ -152,7 +152,6 @@ def create_simple_plan():
           type: object
           required:
             - title
-      
             - description
             - duration_months
             - start_date
@@ -160,88 +159,67 @@ def create_simple_plan():
             title:
               type: string
               example: "Psaumes et Proverbes"
-             
+              description: "Titre du plan"
             description:
               type: string
               example: "Car l'Éternel donne la sagesse..."
+              description: "Description du plan"
             duration_months:
               type: integer
+              minimum: 1
+              maximum: 12
               example: 2
-            emoji:
-              type: string
-              example: "💛"
-            color:
-              type: string
-              example: "#FFA726"
-            has_notifications:
-              type: boolean
-              example: true
-            auto_save_progress:
-              type: boolean
-              example: true
-            is_template:
-              type: boolean
-              example: false
+              description: "Durée en mois"
             start_date:
               type: string
               format: date
               example: "2024-01-15"
               description: "Date de début du plan (YYYY-MM-DD)"
+            emoji:
+              type: string
+              example: "💛"
+              description: "Emoji du plan"
+            color:
+              type: string
+              example: "#8C2AE7"
+              description: "Couleur en hexadécimal"
+            has_notifications:
+              type: boolean
+              default: true
+              example: true
+              description: "Activer les notifications"
+            auto_save_progress:
+              type: boolean
+              default: true
+              example: true
+              description: "Sauvegarde automatique"
+            is_template:
+              type: boolean
+              default: false
+              example: false
+              description: "Si c'est un template"
             notification_settings:
               type: object
+              description: "Configuration des notifications"
               properties:
                 enabled:
                   type: boolean
+                  default: true
                   example: true
+                  description: "Notifications activées"
                 default_time:
                   type: string
-                  example: "07:00"
-                frequency:
-                  type: string
-                  enum: [daily, weekly, monthly]
-                  example: "daily"
-                recurrence_pattern:
-                  type: object
-                  properties:
-                    type:
-                      type: string
-                      enum: [daily, weekly, monthly, yearly]
-                      example: "daily"
-                    interval:
-                      type: integer
-                      example: 1
-                    days_of_week:
-                      type: array
-                      items:
-                        type: integer
-                        minimum: 0
-                        maximum: 6
-                      example: [1, 2, 3, 4, 5]
-                    day_of_month:
-                      type: integer
-                      minimum: 1
-                      maximum: 31
-                      example: 18
-                    end_condition:
-                      type: object
-                      properties:
-                        type:
-                          type: string
-                          enum: [never, date, count]
-                          example: "never"
-                        end_date:
-                          type: string
-                          format: date
-                          example: "2025-12-31"
-                        occurrences:
-                          type: integer
-                          example: 30
+                  default: "07:00"
+                  example: "11:00"
+                  description: "Heure par défaut (HH:mm)"
                 reminder_types:
                   type: array
                   items:
                     type: string
                     enum: [notification, email, sms]
+                  default: ["notification"]
                   example: ["notification"]
+                  description: "Types de rappels"
                 advance_reminders:
                   type: array
                   items:
@@ -249,14 +227,72 @@ def create_simple_plan():
                     properties:
                       minutes:
                         type: integer
+                        minimum: 1
                         example: 15
+                        description: "Minutes avant"
                       hours:
                         type: integer
+                        minimum: 1
                         example: 1
+                        description: "Heures avant"
+                  default: []
                   example: [{"minutes": 15}]
+                  description: "Rappels avancés"
                 custom_message:
                   type: string
                   example: "Temps de lecture biblique !"
+                  description: "Message personnalisé"
+                recurrence_pattern:
+                  type: object
+                  description: "Pattern de récurrence"
+                  properties:
+                    type:
+                      type: string
+                      enum: [daily, weekly, monthly, yearly]
+                      default: "daily"
+                      example: "weekly"
+                      description: "Type de récurrence"
+                    interval:
+                      type: integer
+                      minimum: 1
+                      default: 1
+                      example: 1
+                      description: "Intervalle (tous les X jours/semaines/mois)"
+                    days_of_week:
+                      type: array
+                      items:
+                        type: integer
+                        minimum: 0
+                        maximum: 6
+                      default: []
+                      example: [1, 3, 5]
+                      description: "Jours de la semaine (0=dim, 1=lun, ...)"
+                    day_of_month:
+                      type: integer
+                      minimum: 1
+                      maximum: 31
+                      example: 29
+                      description: "Jour du mois (pour récurrence mensuelle)"
+                    end_condition:
+                      type: object
+                      description: "Condition de fin"
+                      properties:
+                        type:
+                          type: string
+                          enum: [never, date, count]
+                          default: "never"
+                          example: "never"
+                          description: "Type de condition de fin"
+                        end_date:
+                          type: string
+                          format: date
+                          example: "2025-12-31"
+                          description: "Date de fin (si type=date)"
+                        occurrences:
+                          type: integer
+                          minimum: 1
+                          example: 30
+                          description: "Nombre d'occurrences (si type=count)"
     responses:
       201:
         description: Plan créé avec succès
@@ -269,12 +305,42 @@ def create_simple_plan():
             plan_id:
               type: string
               example: "507f1f77bcf86cd799439060"
+            start_date:
+              type: string
+              format: date
+              example: "2024-01-15"
+              description: "Date de début calculée"
+            end_date:
+              type: string
+              format: date
+              example: "2024-03-15"
+              description: "Date de fin calculée"
       400:
         description: Données invalides
+        schema:
+          type: object
+          properties:
+            errors:
+              type: object
+              example:
+                title: ["Ce champ est requis."]
+                start_date: ["Format de date invalide."]
       401:
         description: Token JWT manquant ou invalide
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Token manquant ou invalide"
       500:
         description: Erreur serveur
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Erreur serveur : détails de l'erreur"
     """
     try:
         data = request.get_json()
@@ -292,8 +358,6 @@ def create_simple_plan():
         
     except Exception as e:
         return jsonify({"message": f"Erreur serveur : {str(e)}"}), 500
- 
-
 @reading_plan_bp.route("/my-plans", methods=["GET"])
 @jwt_required()
 def get_my_simple_plans():

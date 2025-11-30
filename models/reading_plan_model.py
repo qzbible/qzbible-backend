@@ -35,13 +35,7 @@ class SimpleReadingPlanModel:
                 "duration_months": data["duration_months"],
                 "has_notifications": data.get("has_notifications", True),
                 "auto_save_progress": data.get("auto_save_progress", True),
-                
-                # ✅ Configuration des notifications
-                "notification_settings": {
-                    "enabled": data.get("notification_settings", {}).get("enabled", True),
-                    "default_time": data.get("notification_settings", {}).get("default_time", "07:00"),
-                    "frequency": data.get("notification_settings", {}).get("frequency", "daily"),
-                    "recurrence_pattern": {
+                "recurrence_pattern": {
                         "type": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("type", "daily"),
                         "interval": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("interval", 1),
                         "days_of_week": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("days_of_week", []),
@@ -51,7 +45,12 @@ class SimpleReadingPlanModel:
                             "end_date": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("end_date"),
                             "occurrences": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("end_condition", {}).get("occurrences")
                         }
-                    },
+                },
+                # ✅ Configuration des notifications
+                "notification_settings": {
+                    "enabled": data.get("notification_settings", {}).get("enabled", True),
+                    "default_time": data.get("notification_settings", {}).get("default_time", "07:00"),
+                    # "frequency": data.get("notification_settings", {}).get("frequency", "daily"), 
                     "reminder_types": data.get("notification_settings", {}).get("reminder_types", ["notification"]),
                     "advance_reminders": data.get("notification_settings", {}).get("advance_reminders", []),
                     "custom_message": data.get("notification_settings", {}).get("custom_message")
