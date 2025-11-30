@@ -617,7 +617,6 @@ def resume_plan_service(plan_id, user_id, data):
     }
 
 
-
 def calculate_plan_progression_with_recurrence(plan, current_date):
     """
     Calcul de progression basé uniquement sur les days_of_week configurés
