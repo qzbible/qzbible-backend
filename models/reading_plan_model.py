@@ -39,7 +39,7 @@ class SimpleReadingPlanModel:
                         "type": data.get("recurrence_pattern", {}).get("type", "daily"),
                         "interval": data.get("recurrence_pattern", {}).get("interval", 1),
                         "days_of_week": data.get("recurrence_pattern", {}).get("days_of_week", []),
-                        "day_of_month": data.get("notification_settings", {}).get("recurrence_pattern", {}).get("day_of_month"),
+                        "day_of_month": data.get("recurrence_pattern", {}).get("day_of_month"),
                         "end_condition": {
                             "type": data.get("recurrence_pattern", {}).get("end_condition", {}).get("type", "never"),
                             "end_date": data.get("recurrence_pattern", {}).get("end_condition", {}).get("end_date"),
