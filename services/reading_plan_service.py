@@ -122,7 +122,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
         
         for plan in plans:
             try:
-                progression = calculate_plan_progression_with_pauses(plan, current_date)
+                progression = calculate_plan_progression_with_recurrence(plan, current_date)
             
                 # Générer les jours avec statut de pause
                 relevant_days = generate_relevant_plan_days_with_pauses(
@@ -131,18 +131,7 @@ def get_user_simple_plans_service(user_id, status_filter=None):
                     current_date,
                     plan,  # ✅ Passer le plan complet
                     plan_status=progression["plan_status"]
-                )
-                # ✅ Calcul de la progression pour TOUS les plans
-                # progression = calculate_plan_progression(plan, current_date)
-                
-                # # ✅ Générer les jours selon le statut du plan
-                # relevant_days = generate_relevant_plan_days(
-                #     progression["start_date"], 
-                #     progression["end_date"],
-                #     current_date,
-                #     plan_status=progression["plan_status"]
-                # )
-                
+                ) 
                 # ✅ Filtrer par statut SEULEMENT si demandé
                 if status_filter:
                     if progression["plan_status"] != status_filter:
@@ -199,102 +188,7 @@ def get_current_pause_info(plan):
             }
     return None   
 
-def calculate_plan_progression(plan, current_date, plan_days=None):
-    """
-    Calcul automatique de progression - TOUS LES PLANS sont retournés
-    """
-    from datetime import datetime, date, timedelta
-    
-    # Gestion de la compatibilité avec les anciens plans (comme avant)
-    settings = plan.get("settings", {})
-    
-    if "start_date" in settings and "end_date" in settings:
-        start_date_str = settings["start_date"]
-        end_date_str = settings["end_date"]
-        
-        if isinstance(start_date_str, str):
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        else:
-            start_date = start_date_str
-            
-        if isinstance(end_date_str, str):
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        else:
-            end_date = end_date_str
-    else:
-        # Ancien format - calculer à partir de created_at + duration_months
-        duration_months = settings.get("duration_months", 1)
-        created_at = plan.get("meta", {}).get("created_at")
-        
-        if created_at:
-            if hasattr(created_at, 'date'):
-                start_date = created_at.date()
-            else:
-                start_date = datetime.strptime(str(created_at)[:10], "%Y-%m-%d").date()
-            
-            end_date = start_date.replace(
-                year=start_date.year + (start_date.month + duration_months - 1) // 12,
-                month=(start_date.month + duration_months - 1) % 12 + 1
-            )
-        else:
-            start_date = current_date
-            end_date = current_date + timedelta(days=30 * duration_months)
-    
-    total_days = (end_date - start_date).days + 1
-    current_day = None
-    
-    # ✅ Déterminer le statut du plan
-    if current_date < start_date:
-        # Plan pas encore commencé
-        elapsed_days = 0
-        remaining_days = total_days
-        completion_percentage = 0.0
-        is_started = False
-        is_completed = False
-        status_label = f"Commence le {start_date.strftime('%d/%m/%Y')}"
-        status_color = "#9E9E9E"
-        plan_status = "pending"
-        
-    elif current_date > end_date:
-        # Plan terminé
-        elapsed_days = total_days
-        remaining_days = 0
-        completion_percentage = 100.0
-        is_started = True
-        is_completed = True
-        status_label = f"Terminé le {end_date.strftime('%d/%m/%Y')}"
-        status_color = "#4CAF50"
-        plan_status = "completed"
-        
-    else:
-        # Plan en cours
-        elapsed_days = (current_date - start_date).days + 1
-        remaining_days = max(0, total_days - elapsed_days)
-        completion_percentage = round((elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
-        is_started = True
-        is_completed = False
-        status_label = f"Jour {elapsed_days}/{total_days}"
-        status_color = "#2196F3"
-        current_day = elapsed_days
-        plan_status = "active"
-    
-    return {
-        "total_days": total_days,
-        "elapsed_days": elapsed_days,
-        "remaining_days": remaining_days,
-        "completion_percentage": completion_percentage,
-        "current_date": current_date.isoformat(),
-        "current_day": current_day,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "is_started": is_started,
-        "is_completed": is_completed,
-        "status_label": status_label,
-        "status_color": status_color,
-        "plan_status": plan_status,  # ✅ Ajouter le statut pour la génération des jours
-        "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
-        "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0
-    }
+ 
 
 def mark_day_completed_service(user_plan_id, day):
     """Marquer un jour comme complété"""
@@ -368,7 +262,6 @@ def get_simple_plan_details_service(plan_id, user_id, include_all_days=False):
         
         if not plan:
             return None
-        
         # Vérifier les droits d'accès
         # Pour l'instant, seul le créateur peut voir le plan
         # Vous pouvez ajouter d'autres logiques d'accès ici
@@ -383,7 +276,7 @@ def get_simple_plan_details_service(plan_id, user_id, include_all_days=False):
         current_date = date.today()
         
         # Calcul de la progression
-        progression = calculate_plan_progression_with_pauses(plan, current_date)
+        progression = calculate_plan_progression_with_recurrence(plan, current_date)
         
         # Générer les jours selon le paramètre
         if include_all_days:
@@ -482,10 +375,9 @@ def generate_all_plan_days(start_date, end_date):
     
     return days
 
-
 def generate_relevant_plan_days_with_pauses(start_date, end_date, current_date, plan, plan_status="active"):
     """
-    Générer les jours avec gestion des pauses
+    Générer les jours avec gestion des pauses basé sur days_of_week
     """
     from datetime import datetime, date, timedelta
     
@@ -497,53 +389,99 @@ def generate_relevant_plan_days_with_pauses(start_date, end_date, current_date, 
     if isinstance(current_date, str):
         current_date = datetime.strptime(current_date, "%Y-%m-%d").date()
     
+    # ✅ Récupérer la configuration de récurrence
+    settings = plan.get("settings", {})
+    recurrence_pattern = settings.get("recurrence_pattern", {})
+    days_of_week = recurrence_pattern.get("days_of_week", [0,1,2,3,4,5,6])  # Tous les jours par défaut
+    
     # Récupérer l'historique des pauses
     pause_history = plan.get("pause_history", [])
     current_plan_status = plan.get("current_status", "active")
     
-    days = []
+    # ✅ Calculer tous les jours actifs du plan selon days_of_week
+    all_active_days = calculate_active_days_by_weekdays(start_date, end_date, days_of_week)
     
-    # Logique selon le statut (comme avant)
+    # ✅ Filtrer les jours selon le statut pour retourner seulement 5 jours pertinents
+    relevant_active_days = []
+    
     if plan_status == "pending":
-        range_start = start_date
-        range_end = min(end_date, start_date + timedelta(days=4))
-    elif plan_status == "completed":
-        total_days = (end_date - start_date).days + 1
-        range_start = max(start_date, end_date - timedelta(days=4))
-        range_end = end_date
-    else:  # active
-        range_start = max(start_date, current_date - timedelta(days=2))
-        range_end = min(end_date, current_date + timedelta(days=2))
-    
-    # Générer les jours avec statut de pause
-    current_loop_date = range_start
-    day_number = (range_start - start_date).days + 1
-    
-    while current_loop_date <= range_end:
-        if start_date <= current_loop_date <= end_date:
-            # Vérifier si ce jour est dans une période de pause
-            is_paused = is_date_in_pause_period(current_loop_date, pause_history)
-            
-            day_obj = {
-                "day": day_number,
-                "date": current_loop_date.isoformat(),
-                "date_formatted": current_loop_date.strftime("%d/%m/%Y"),
-                "weekday": current_loop_date.strftime("%A"),
-                "weekday_fr": get_french_weekday(current_loop_date.weekday()),
-                "is_today": current_loop_date == current_date,
-                "is_past": current_loop_date < current_date,
-                "is_future": current_loop_date > current_date,
-                "is_in_plan": True,
-                "is_paused": is_paused,  # ✅ Nouveau statut
-                "status": "paused" if is_paused else ("completed" if current_loop_date < current_date else "pending")
-            }
-            
-            days.append(day_obj)
+        # 5 premiers jours actifs
+        relevant_active_days = all_active_days[:5]
         
-        current_loop_date += timedelta(days=1)
-        day_number += 1
+    elif plan_status == "completed":
+        # 5 derniers jours actifs
+        relevant_active_days = all_active_days[-5:] if len(all_active_days) > 5 else all_active_days
+        
+    else:  # active ou paused
+        # Trouver le jour actif actuel et prendre 2 avant + aujourd'hui + 2 après
+        current_active_day_index = None
+        
+        for i, active_day in enumerate(all_active_days):
+            if active_day["date"] <= current_date:
+                current_active_day_index = i
+        
+        if current_active_day_index is not None:
+            start_index = max(0, current_active_day_index - 2)
+            end_index = min(len(all_active_days), current_active_day_index + 3)
+            relevant_active_days = all_active_days[start_index:end_index]
+        else:
+            # Si aucun jour actif trouvé, prendre les 5 premiers
+            relevant_active_days = all_active_days[:5]
+    
+    # ✅ Enrichir chaque jour avec les infos de pause et statut
+    days = []
+    for active_day in relevant_active_days:
+        day_date = active_day["date"]
+        
+        # Vérifier si ce jour est dans une période de pause
+        is_paused = is_date_in_pause_period(day_date, pause_history)
+        
+        # Déterminer le statut du jour
+        if is_paused:
+            day_status = "paused"
+        elif day_date < current_date:
+            day_status = "completed"
+        elif day_date == current_date:
+            day_status = "current"
+        else:
+            day_status = "pending"
+        
+        day_obj = {
+            "day": active_day["day_number"],
+            "date": day_date.isoformat(),
+            "date_formatted": day_date.strftime("%d/%m/%Y"),
+            "weekday": day_date.strftime("%A"),
+            "weekday_fr": active_day["weekday_name"],
+            "is_today": day_date == current_date,
+            "is_past": day_date < current_date,
+            "is_future": day_date > current_date,
+            "is_in_plan": True,
+            "is_active_day": True,  # ✅ Tous ces jours sont actifs selon la récurrence
+            "is_paused": is_paused,
+            "status": day_status
+        }
+        
+        days.append(day_obj)
     
     return days
+
+def is_date_in_pause_period(check_date, pause_history):
+    """Vérifier si une date est dans une période de pause"""
+    from datetime import datetime, date
+    
+    for pause in pause_history:
+        pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        
+        if pause["resume_date"]:
+            pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+        else:
+            # Pause active - considérer jusqu'à aujourd'hui
+            pause_end = date.today()
+        
+        if pause_start <= check_date <= pause_end:
+            return True
+    
+    return False
 
 def is_date_in_pause_period(check_date, pause_history):
     """Vérifier si une date est dans une période de pause"""
@@ -680,14 +618,13 @@ def resume_plan_service(plan_id, user_id, data):
 
 
 
-
-def calculate_plan_progression_with_pauses(plan, current_date):
+def calculate_plan_progression_with_recurrence(plan, current_date):
     """
-    Calcul de progression avec prise en compte des pauses
+    Calcul de progression basé uniquement sur les days_of_week configurés
     """
     from datetime import datetime, date, timedelta
     
-    # Gestion de la compatibilité avec les anciens plans (comme avant)
+    # Gestion de la compatibilité avec les anciens plans
     settings = plan.get("settings", {})
     
     if "start_date" in settings and "end_date" in settings:
@@ -704,7 +641,7 @@ def calculate_plan_progression_with_pauses(plan, current_date):
         else:
             end_date = end_date_str
     else:
-        # Ancien format - calculer à partir de created_at + duration_months
+        # Ancien format
         duration_months = settings.get("duration_months", 1)
         created_at = plan.get("meta", {}).get("created_at")
         
@@ -722,46 +659,55 @@ def calculate_plan_progression_with_pauses(plan, current_date):
             start_date = current_date
             end_date = current_date + timedelta(days=30 * duration_months)
     
-    # ✅ Récupérer les infos de pause
+    # ✅ Récupérer UNIQUEMENT les days_of_week
+    recurrence_pattern = settings.get("recurrence_pattern", {})
+    days_of_week = recurrence_pattern.get("days_of_week", [0,1,2,3,4,5,6])  # Tous les jours par défaut
+    
+    # ✅ Calculer tous les jours actifs selon days_of_week
+    active_days = calculate_active_days_by_weekdays(start_date, end_date, days_of_week)
+    total_active_days = len(active_days)
+    
+    # ✅ Calculer les jours actifs écoulés jusqu'à aujourd'hui
+    if current_date < start_date:
+        elapsed_active_days = 0
+        current_active_day = None
+    else:
+        end_calculation_date = min(current_date, end_date)
+        elapsed_active_days_list = calculate_active_days_by_weekdays(start_date, end_calculation_date, days_of_week)
+        elapsed_active_days = len(elapsed_active_days_list)
+        
+        # Trouver le jour actif actuel
+        current_active_day = None
+        for day in active_days:
+            if day["date"] == current_date:
+                current_active_day = day["day_number"]
+                break
+    
+    # ✅ Gestion des pauses
     pause_history = plan.get("pause_history", [])
     current_plan_status = plan.get("current_status", "active")
-    pause_adjustments = plan.get("pause_adjustments", {})
     
-    # ✅ Calculer le nombre de jours en pause
-    total_paused_days = calculate_total_paused_days(pause_history, current_date)
-    
-    # ✅ Ajuster les calculs selon les pauses
-    total_days = (end_date - start_date).days + 1
-    
-    # Jours effectivement écoulés (sans compter les pauses)
-    if current_date < start_date:
-        effective_elapsed_days = 0
+    if pause_history:
+        paused_active_days = calculate_paused_active_days(pause_history, active_days, current_date)
+        effective_elapsed_days = max(0, elapsed_active_days - paused_active_days)
+        total_paused_days = paused_active_days
     else:
-        raw_elapsed_days = min((current_date - start_date).days + 1, total_days)
-        paused_days_in_elapsed = calculate_paused_days_in_period(pause_history, start_date, current_date)
-        effective_elapsed_days = max(0, raw_elapsed_days - paused_days_in_elapsed)
+        effective_elapsed_days = elapsed_active_days
+        total_paused_days = 0
     
-    current_day = None
-    
-    # ✅ Déterminer le statut du plan avec gestion des pauses
+    # ✅ Déterminer le statut
     if current_plan_status == "paused":
-        # Plan en pause
-        completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
-        remaining_days = max(0, total_days - effective_elapsed_days)
+        completion_percentage = round((effective_elapsed_days / total_active_days) * 100, 1) if total_active_days > 0 else 0
+        remaining_days = max(0, total_active_days - effective_elapsed_days)
         is_started = effective_elapsed_days > 0
         is_completed = False
-        status_label = f"En pause - Jour {effective_elapsed_days}/{total_days}"
+        status_label = f"En pause - Jour {effective_elapsed_days}/{total_active_days}"
         status_color = "#FF9800"
         plan_status = "paused"
         
-        # Trouver le jour actuel dans le plan (sans compter les pauses)
-        current_day = effective_elapsed_days if effective_elapsed_days > 0 else 1
-        
     elif current_date < start_date:
-        # Plan pas encore commencé
-        effective_elapsed_days = 0
-        remaining_days = total_days
         completion_percentage = 0.0
+        remaining_days = total_active_days
         is_started = False
         is_completed = False
         status_label = f"Commence le {start_date.strftime('%d/%m/%Y')}"
@@ -769,10 +715,8 @@ def calculate_plan_progression_with_pauses(plan, current_date):
         plan_status = "pending"
         
     elif current_date > end_date:
-        # Plan terminé
-        effective_elapsed_days = total_days
-        remaining_days = 0
         completion_percentage = 100.0
+        remaining_days = 0
         is_started = True
         is_completed = True
         status_label = f"Terminé le {end_date.strftime('%d/%m/%Y')}"
@@ -780,25 +724,24 @@ def calculate_plan_progression_with_pauses(plan, current_date):
         plan_status = "completed"
         
     else:
-        # Plan en cours
-        completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
-        remaining_days = max(0, total_days - effective_elapsed_days)
+        completion_percentage = round((effective_elapsed_days / total_active_days) * 100, 1) if total_active_days > 0 else 0
+        remaining_days = max(0, total_active_days - effective_elapsed_days)
         is_started = True
         is_completed = False
-        status_label = f"Jour {effective_elapsed_days}/{total_days}"
+        status_label = f"Jour {effective_elapsed_days}/{total_active_days}"
         status_color = "#2196F3"
-        current_day = effective_elapsed_days
         plan_status = "active"
     
     return {
-        "total_days": total_days,
-        "elapsed_days": effective_elapsed_days,  # ✅ Jours effectifs (sans pauses)
-        "raw_elapsed_days": min((current_date - start_date).days + 1, total_days) if current_date >= start_date else 0,  # ✅ Jours bruts
-        "paused_days": total_paused_days,  # ✅ Total jours en pause
-        "remaining_days": remaining_days,
+        "total_calendar_days": (end_date - start_date).days + 1,
+        "total_active_days": total_active_days,  # ✅ Jours selon days_of_week
+        "elapsed_active_days": effective_elapsed_days,
+        "raw_elapsed_days": elapsed_active_days,
+        "paused_days": total_paused_days,
+        "remaining_active_days": remaining_days,
         "completion_percentage": completion_percentage,
         "current_date": current_date.isoformat(),
-        "current_day": current_day,
+        "current_active_day": current_active_day,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "is_started": is_started,
@@ -806,11 +749,14 @@ def calculate_plan_progression_with_pauses(plan, current_date):
         "status_label": status_label,
         "status_color": status_color,
         "plan_status": plan_status,
-        "current_plan_status": current_plan_status,  # ✅ Statut système (active/paused/completed)
-        "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
-        "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0,
+        "current_plan_status": current_plan_status,
         
-        # ✅ Infos spécifiques aux pauses
+        # ✅ Config de récurrence simplifiée
+        "recurrence_config": {
+            "days_of_week": days_of_week,
+            "active_weekdays": len(days_of_week)
+        },
+        
         "pause_info": {
             "is_paused": current_plan_status == "paused",
             "total_paused_days": total_paused_days,
@@ -818,11 +764,39 @@ def calculate_plan_progression_with_pauses(plan, current_date):
         }
     }
 
-def calculate_total_paused_days(pause_history, current_date):
-    """Calculer le nombre total de jours en pause"""
+def calculate_active_days_by_weekdays(start_date, end_date, days_of_week):
+    """
+    Calculer tous les jours actifs basés uniquement sur days_of_week
+    """
+    from datetime import timedelta, date  # ✅ Ajouter l'import de 'date'
+    
+    active_days = []
+    current_date = start_date
+    day_number = 1
+    
+    while current_date <= end_date:
+        weekday = current_date.weekday()  # 0=Lundi, 6=Dimanche 
+        # ✅ Vérifier si ce jour de la semaine est dans la config
+        if weekday in days_of_week:
+            active_days.append({
+                "day_number": day_number,
+                "date": current_date,
+                "date_iso": current_date.isoformat(),
+                "weekday": weekday,
+                "weekday_name": get_french_weekday(weekday),
+                "is_today": current_date == date.today()  # ✅ Maintenant 'date' est défini
+            })
+            day_number += 1 
+        current_date += timedelta(days=1) 
+    return active_days
+
+def calculate_paused_active_days(pause_history, active_days, current_date):
+    """
+    Calculer combien de jours actifs tombent dans les périodes de pause
+    """
     from datetime import datetime
     
-    total_days = 0
+    paused_count = 0
     
     for pause in pause_history:
         pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
@@ -833,31 +807,193 @@ def calculate_total_paused_days(pause_history, current_date):
             # Pause active - compter jusqu'à aujourd'hui
             pause_end = min(current_date, datetime.now().date())
         
-        if pause_end >= pause_start:
-            total_days += (pause_end - pause_start).days + 1
+        # Compter les jours actifs dans cette période de pause
+        for active_day in active_days:
+            active_day_date = active_day["date"]
+            
+            # Si le jour actif tombe dans la période de pause
+            if pause_start <= active_day_date <= pause_end:
+                paused_count += 1
     
-    return total_days
+    return paused_count
 
-def calculate_paused_days_in_period(pause_history, start_date, end_date):
-    """Calculer les jours en pause dans une période donnée"""
-    from datetime import datetime
+# def calculate_plan_progression_with_pauses(plan, current_date):
+#     """
+#     Calcul de progression avec prise en compte des pauses
+#     """
+#     from datetime import datetime, date, timedelta
     
-    paused_days = 0
+#     # Gestion de la compatibilité avec les anciens plans (comme avant)
+#     settings = plan.get("settings", {})
     
-    for pause in pause_history:
-        pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+#     if "start_date" in settings and "end_date" in settings:
+#         start_date_str = settings["start_date"]
+#         end_date_str = settings["end_date"]
         
-        if pause["resume_date"]:
-            pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
-        else:
-            # Pause active
-            pause_end = datetime.now().date()
+#         if isinstance(start_date_str, str):
+#             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+#         else:
+#             start_date = start_date_str
+            
+#         if isinstance(end_date_str, str):
+#             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+#         else:
+#             end_date = end_date_str
+#     else:
+#         # Ancien format - calculer à partir de created_at + duration_months
+#         duration_months = settings.get("duration_months", 1)
+#         created_at = plan.get("meta", {}).get("created_at")
         
-        # Calculer l'intersection entre la période de pause et la période demandée
-        overlap_start = max(pause_start, start_date)
-        overlap_end = min(pause_end, end_date)
-        
-        if overlap_end >= overlap_start:
-            paused_days += (overlap_end - overlap_start).days + 1
+#         if created_at:
+#             if hasattr(created_at, 'date'):
+#                 start_date = created_at.date()
+#             else:
+#                 start_date = datetime.strptime(str(created_at)[:10], "%Y-%m-%d").date()
+            
+#             end_date = start_date.replace(
+#                 year=start_date.year + (start_date.month + duration_months - 1) // 12,
+#                 month=(start_date.month + duration_months - 1) % 12 + 1
+#             )
+#         else:
+#             start_date = current_date
+#             end_date = current_date + timedelta(days=30 * duration_months)
     
-    return paused_days
+#     # ✅ Récupérer les infos de pause
+#     pause_history = plan.get("pause_history", [])
+#     current_plan_status = plan.get("current_status", "active")
+#     pause_adjustments = plan.get("pause_adjustments", {})
+    
+#     # ✅ Calculer le nombre de jours en pause
+#     total_paused_days = calculate_total_paused_days(pause_history, current_date)
+    
+#     # ✅ Ajuster les calculs selon les pauses
+#     total_days = (end_date - start_date).days + 1
+    
+#     # Jours effectivement écoulés (sans compter les pauses)
+#     if current_date < start_date:
+#         effective_elapsed_days = 0
+#     else:
+#         raw_elapsed_days = min((current_date - start_date).days + 1, total_days)
+#         paused_days_in_elapsed = calculate_paused_days_in_period(pause_history, start_date, current_date)
+#         effective_elapsed_days = max(0, raw_elapsed_days - paused_days_in_elapsed)
+    
+#     current_day = None
+    
+#     # ✅ Déterminer le statut du plan avec gestion des pauses
+#     if current_plan_status == "paused":
+#         # Plan en pause
+#         completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
+#         remaining_days = max(0, total_days - effective_elapsed_days)
+#         is_started = effective_elapsed_days > 0
+#         is_completed = False
+#         status_label = f"En pause - Jour {effective_elapsed_days}/{total_days}"
+#         status_color = "#FF9800"
+#         plan_status = "paused"
+        
+#         # Trouver le jour actuel dans le plan (sans compter les pauses)
+#         current_day = effective_elapsed_days if effective_elapsed_days > 0 else 1
+        
+#     elif current_date < start_date:
+#         # Plan pas encore commencé
+#         effective_elapsed_days = 0
+#         remaining_days = total_days
+#         completion_percentage = 0.0
+#         is_started = False
+#         is_completed = False
+#         status_label = f"Commence le {start_date.strftime('%d/%m/%Y')}"
+#         status_color = "#9E9E9E"
+#         plan_status = "pending"
+        
+#     elif current_date > end_date:
+#         # Plan terminé
+#         effective_elapsed_days = total_days
+#         remaining_days = 0
+#         completion_percentage = 100.0
+#         is_started = True
+#         is_completed = True
+#         status_label = f"Terminé le {end_date.strftime('%d/%m/%Y')}"
+#         status_color = "#4CAF50"
+#         plan_status = "completed"
+        
+#     else:
+#         # Plan en cours
+#         completion_percentage = round((effective_elapsed_days / total_days) * 100, 1) if total_days > 0 else 0
+#         remaining_days = max(0, total_days - effective_elapsed_days)
+#         is_started = True
+#         is_completed = False
+#         status_label = f"Jour {effective_elapsed_days}/{total_days}"
+#         status_color = "#2196F3"
+#         current_day = effective_elapsed_days
+#         plan_status = "active"
+    
+#     return {
+#         "total_days": total_days,
+#         "elapsed_days": effective_elapsed_days,  # ✅ Jours effectifs (sans pauses)
+#         "raw_elapsed_days": min((current_date - start_date).days + 1, total_days) if current_date >= start_date else 0,  # ✅ Jours bruts
+#         "paused_days": total_paused_days,  # ✅ Total jours en pause
+#         "remaining_days": remaining_days,
+#         "completion_percentage": completion_percentage,
+#         "current_date": current_date.isoformat(),
+#         "current_day": current_day,
+#         "start_date": start_date.isoformat(),
+#         "end_date": end_date.isoformat(),
+#         "is_started": is_started,
+#         "is_completed": is_completed,
+#         "status_label": status_label,
+#         "status_color": status_color,
+#         "plan_status": plan_status,
+#         "current_plan_status": current_plan_status,  # ✅ Statut système (active/paused/completed)
+#         "days_until_start": max(0, (start_date - current_date).days) if current_date < start_date else 0,
+#         "days_since_end": max(0, (current_date - end_date).days) if current_date > end_date else 0,
+        
+#         # ✅ Infos spécifiques aux pauses
+#         "pause_info": {
+#             "is_paused": current_plan_status == "paused",
+#             "total_paused_days": total_paused_days,
+#             "current_pause": get_current_pause_info(plan) if current_plan_status == "paused" else None
+#         }
+#     }
+
+# def calculate_total_paused_days(pause_history, current_date):
+#     """Calculer le nombre total de jours en pause"""
+#     from datetime import datetime
+    
+#     total_days = 0
+    
+#     for pause in pause_history:
+#         pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        
+#         if pause["resume_date"]:
+#             pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+#         else:
+#             # Pause active - compter jusqu'à aujourd'hui
+#             pause_end = min(current_date, datetime.now().date())
+        
+#         if pause_end >= pause_start:
+#             total_days += (pause_end - pause_start).days + 1
+    
+#     return total_days
+
+# def calculate_paused_days_in_period(pause_history, start_date, end_date):
+#     """Calculer les jours en pause dans une période donnée"""
+#     from datetime import datetime
+    
+#     paused_days = 0
+    
+#     for pause in pause_history:
+#         pause_start = datetime.strptime(pause["pause_date"], "%Y-%m-%d").date()
+        
+#         if pause["resume_date"]:
+#             pause_end = datetime.strptime(pause["resume_date"], "%Y-%m-%d").date()
+#         else:
+#             # Pause active
+#             pause_end = datetime.now().date()
+        
+#         # Calculer l'intersection entre la période de pause et la période demandée
+#         overlap_start = max(pause_start, start_date)
+#         overlap_end = min(pause_end, end_date)
+        
+#         if overlap_end >= overlap_start:
+#             paused_days += (overlap_end - overlap_start).days + 1
+    
+#     return paused_days
