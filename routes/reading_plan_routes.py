@@ -490,27 +490,23 @@ def delete_user_plan(user_plan_id):
         current_user_id = get_jwt_identity()
         
         # Vérifier que le plan appartient à l'utilisateur
-        user_plan = UserSimplePlanModel.get_collection().find_one({
-            "_id": ObjectId(user_plan_id),
-            "user_id": ObjectId(current_user_id)
+        user_plan = SimpleReadingPlanModel.get_collection().find_one({
+            "_id": ObjectId(user_plan_id)
+            
         })
         
         if not user_plan:
             return jsonify({"message": "Plan non trouvé ou accès refusé"}), 404
         
         # Supprimer le plan
-        result = UserSimplePlanModel.get_collection().delete_one({
+        result = SimpleReadingPlanModel.get_collection().delete_one({
             "_id": ObjectId(user_plan_id)
         })
         
         if result.deleted_count == 0:
             return jsonify({"message": "Erreur lors de la suppression"}), 500
         
-        # Décrémenter les stats du plan principal
-        SimpleReadingPlanModel.get_collection().update_one(
-            {"_id": ObjectId(user_plan["plan_id"])},
-            {"$inc": {"stats.subscribers": -1}}
-        )
+       
         
         return jsonify({
             "message": "Plan supprimé avec succès"
